@@ -1,0 +1,34 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# STM32 / PX4 开发板 udev 规则
+#
+# 目的：让普通用户可以【不加 sudo】访问 DFU 模式与 STM32 虚拟串口。
+#
+# 安装（需要管理员权限，请自己执行）：
+#     sudo cp 50-stm32-dfu.rules /etc/udev/rules.d/
+#     sudo udevadm control --reload-rules
+#     sudo udevadm trigger
+#   然后重新插拔 USB。
+#
+# 或者直接跑同目录下的 install_udev.sh
+#
+# 为什么需要它：
+#   DFU 模式下的设备是 USB DFU 类设备（不是 tty），systemd-logind 的 uaccess
+#   ACL 一般不会覆盖到它 → dfu-util / Betaflight Configurator 会报
+#   "Cannot open DFU device"，除非用 sudo。
+#   PX4 正常运行与 PX4 bootloader 模式是 CDC-ACM（tty），通常已被 ACL 覆盖，
+#   但这里也补齐，避免换桌面环境后失效。
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── STM32 ROM System Bootloader（DFU 模式）───────────────────────────────────
+# 刷 Betaflight / INAV / PX4 bootloader 都走这条路。
+# 识别方法：按住 BOOT 键插 USB，lsusb 应出现 "0483:df11 STM32 ... DFU in FS Mode"
+SUBSYSTEM=="usb", ATTR{idVendor}=="0483", ATTR{idProduct}=="df11", MODE="0666", GROUP="plugdev", TAG+="uaccess"
+
+# ── 其它 STM32 设备（ST-Link V2/V3、ST 官方虚拟串口等）──────────────────────
+# 预留：以后接 ST-Link 调试或换板子时不用再改规则。
+SUBSYSTEM=="usb", ATTR{idVendor}=="0483", MODE="0666", GROUP="plugdev", TAG+="uaccess"
+
+# ── tty 兜底（PX4 bootloader / PX4 运行时）──────────────────────────────────
+# 大多数发行版靠 systemd-logind 的 uaccess ACL 已经够用；
+# 这里显式补一条，防止无桌面的 headless 环境下不分配 ACL。
+SUBSYSTEM=="tty", ATTRS{idVendor}=="0483", MODE="0666", GROUP="plugdev"

@@ -1,0 +1,228 @@
+. ${R}etc/init.d/rc.mc_defaults
+
+PX4_SIMULATOR=${PX4_SIMULATOR:=gz}
+PX4_GZ_WORLD=${PX4_GZ_WORLD:=airground}
+PX4_SIM_MODEL=${PX4_SIM_MODEL:=airground}
+
+# ⚠️⚠️ 这里为什么用 param set（强制），而不是 param set-default？ ⚠️⚠️
+#
+#   param set-default  =「只在参数【还没有值】时才写入」
+#   而 PX4 SITL 会把参数【持久化】到 build/px4_sitl_default/rootfs/parameters.bson
+#   → 只要 bson 里已经有这个参数（比如某次调试时运行时改过），
+#     airframe 里的 set-default 就【永远不再生效】，表现为
+#     “代码明明改了，跑起来却没变化”（踩过两次）。
+#
+#   所以：【机体接口类】参数一律用 param set 强制覆盖，保证每次启动都是对的。
+#         【性能调参类】（如 MPC_THR_HOVER）保留 set-default，允许用户覆盖微调。
+
+# ==================== 接口使能 ====================
+param set SIM_GZ_EN 1
+
+# ==================== 多旋翼控制分配 ====================
+param set CA_AIRFRAME 0
+param set CA_ROTOR_COUNT 4
+
+# 桨0 前左 (joint3 -> link1)
+param set CA_ROTOR0_PX +0.1008
+param set CA_ROTOR0_PY +0.1100
+param set CA_ROTOR0_KM +0.05
+
+# 桨1 前右 (joint4 -> link2)
+param set CA_ROTOR1_PX +0.1008
+param set CA_ROTOR1_PY -0.1100
+param set CA_ROTOR1_KM -0.05
+
+# 桨2 后左 (joint5 -> link3)
+param set CA_ROTOR2_PX -0.1092
+param set CA_ROTOR2_PY +0.1100
+param set CA_ROTOR2_KM -0.05
+
+# 桨3 后右 (joint6 -> link4)
+param set CA_ROTOR3_PX -0.1092
+param set CA_ROTOR3_PY -0.1100
+param set CA_ROTOR3_KM +0.05
+
+# ==================== 传感器使能 ====================
+param set SENS_EN_MAGSIM 0
+
+# ==================== 仿真环境配置（解锁必需）====================
+# 实测教训：不加这两行，ARM 命令虽然回 ACCEPTED，
+#           但 HEARTBEAT 的解锁位始终是 False —— 飞机根本没解锁。
+#           后果极其隐蔽：gz_bridge 里 _armed.armed=false → 所有输出取
+#           DIS 值 → 舵机永远停在 DIS 位，看起来像【机构卡死】。
+#
+# 根因在 commander 的 modeCheck：
+#   if (manual_control_signal_lost && mode_req_manual_control != 0) {
+#       ... reporter.clearArmingBits(mode_req_manual_control);   # 无条件执行
+#   }
+# 开机默认 Position 模式【需要摇杆】，仿真里既无遥控器也没摇杆
+# → 该模式被 clearArmingBits 移出可解锁集合 → 解锁被拒。
+#
+# COM_RC_IN_MODE=5 = **RC 优先，MAVLink 兜底**，两条手动控制通路都支持：
+#   · 正统 RC：RC_CHANNELS_OVERRIDE(70) → input_rc → rc_update → SOURCE_RC
+#   · 手柄/MAVLink：QGC 或 joystick_drive.py 发 MANUAL_CONTROL(69)
+# RC 源一旦有效就优先，失效时自动回落到 MAVLink；两者都没有才算遥控丢失。
+# （另一选择：1 = MAVLink only；0 = RC only，会让 QGC 手柄完全失效）
+param set COM_RC_IN_MODE 5
+
+# ─── 正统 RC 通路的前提参数 ───
+# rc_update.cpp:154 的 _rc_calibrated 要求：
+#     RC_CHAN_CNT > 0  且  RC_MAP_{ROLL|PITCH|THROTTLE|YAW} 至少一个 > 0
+# 不满足时 manual_control_input.valid 恒为 false，RC 通路等于不存在。
+# ⚠️ PX4 v1.18 的 RC_MAP_* 默认全是 0（未分配），不是常见的 1/2/3/4。
+# AETR：CH1=副羼(roll) CH2=升降(pitch) CH3=油门 CH4=方向(yaw)
+# RC1_MIN/MAX/TRIM 默认 1000/2000/1500，正好是标准值，无需改动。
+param set RC_CHAN_CNT 8
+param set RC_MAP_ROLL 1
+param set RC_MAP_PITCH 2
+param set RC_MAP_THROTTLE 3
+param set RC_MAP_YAW 4
+
+# 遥控丢失豁免：bit3 = External Mode。
+# 背景：地面模式下 PX4 会用 NAV_RCL_ACT（默认 2 = Return）处理「摇杆丢了」，
+#      导致一台在地上跑的机器人去「RTL 飞回家」（实测日志 RTL: start return at 1 m）。
+# 而我们的模块自己已经处理了失联（manualDrive() 里 mcs.valid=false → 输出 0）。
+# 豁免后：外部模式不再触发该 failsafe；飞行模式（Position 等）不受影响，仍保留 Return。
+# 注意：参数描述里写着「External modes requiring stick input will still failsafe」，
+#      但源码 isFailsafeIgnored() 对外部模式只查 bit3，没有额外条件 —— 已实测验证。
+param set COM_RCL_EXCEPT 8
+
+# 起飞前自动上锁：关闭。
+# 原因：地面模式需要长期 armed（开一段停一段），而 PX4 的默认值 10 s 是
+# 「解锁后 10 s 内不起飞就自动上锁」（Commander.cpp:2467 preflight_inaction）。
+# 地面模式下 landed 恒为 true、_have_taken_off_since_arming 恒为 false，
+# 因此倒计时会一直生效 → 开 11 s 就自己上锁（实测）。
+# 代价：飞行模式下「解锁后忘了起飞」不再自动上锁，靠人工复核。
+param set COM_DISARM_PRFLT 0
+
+# 着陆后自动上锁：关闭。
+# 原因：地面模式靠 publishThrustZero 把 throttle 压成 0 来喂 land detector，
+# 而 land detector 偶尔会把轮子剧烈打滑误判为「起飞」（实测日志：
+# "Takeoff detected" → "Landing detected" → "Disarmed by landing"），
+# 而 COM_DISARM_LAND 默认 2 s，一旦发生就当场自动上锁、四条驱动全停。
+# 地面模式本来就要在地面上跑，不存在「落地后要 disarm」的语义。
+param set COM_DISARM_LAND 0
+
+# 数据链丢失保护：纯仿真无真实数传链路，关掉（默认即 0，显式写出防污染）
+param set NAV_DLL_ACT 0
+
+# ==================== 悬停油门（性能调参类，保留 set-default）====================
+# PX4 默认 MPC_THR_HOVER=0.5，但我们的实际悬停油门是 1/sqrt(TWR)。
+# TWR=3 时 = 1/sqrt(3) = 0.577。不设的话 PX4 会以为 50% 就该悬停，
+# 结果起飞油门爬到 575 就停住，机器人抬不起来。
+param set-default MPC_THR_HOVER 0.5774
+
+# ==================== ESC / 舵机 功能映射 ====================
+# 电机输出 1~4 → Gazebo 侧 4 个 MulticopterMotorModel
+param set SIM_GZ_EC_FUNC1 101
+param set SIM_GZ_EC_FUNC2 102
+param set SIM_GZ_EC_FUNC3 103
+param set SIM_GZ_EC_FUNC4 104
+
+# ==================== ESC 双向语义（对齐英机 DShot 3D）====================
+# PX4 的 EC 输出组本身是非负的 [0,1000]（min/max/disarmed 都是 uint16_t）。
+# 但真实 DShot 3D 电调的「停」在【中位】（DSHOT_3D_SPLIT≈1048），不是 0。
+# 为了「仿真 == 实车」，这里把 DIS 设成中位 500：
+#     未解锁           → outputs = 500  → 中位 → 停
+#     control =  0     → outputs = 500  → 中位 → 停
+#     control = -1     → outputs = 0    → 满反转
+#     control = +1     → outputs = 1000 → 满前进
+# ⚠️ 千万不能留默认值 0：那样「未解锁」和「满反转」是同一个数字，
+#    会出现「未解锁却满速倒车」的 bug。
+param set SIM_GZ_EC_DIS1 500
+param set SIM_GZ_EC_DIS2 500
+param set SIM_GZ_EC_DIS3 500
+param set SIM_GZ_EC_DIS4 500
+
+param set SIM_GZ_EC_MIN1 0
+param set SIM_GZ_EC_MAX1 1000
+
+# 4 路电机全部标记为「可逆/双向」—— 这是【地面位】的硬需求。
+#   仿真：gz_bridge 忽略该位（由 AirGroundMux 按中位语义自行解码）
+#   实车：DShot 驱动靠它启用 3D（apply_min_values 把 min 改成 48，
+#          使中位正好落在 DSHOT_3D_SPLIT），需刷 Bluejay 3D / AM32 双向固件。
+#
+# ⚠️ 已知短板（待解决，见会话笔记 yaw-analysis）：
+#   桨只能产生 0..1 的单向推力，而 CA_R_REV 是【通道级】标志，桨和轮共用
+#   CA_ROTOR0..3，于是三处约束互斥、无法同时满足：
+#     ① CA_R_REV   ：桨要 0（单向），轮要 15（双向）
+#     ② SIM_GZ_EC_DIS：桨要 0（未解锁=停），轮要 500（否则未解锁满速倒车）
+#     ③ 通道复用   ：CA_ROTOR0..3 上两者不可分离
+#   当前取值 REV=15 + DIS=500 是「地面安全优先」，代价是飞行时若控制分配
+#   给出负推力，会被 AirGroundMux 的 (s>0) 截成 0 → 悬停时约一半桨不转、
+#   实际力矩与分配器假设不符，偏航权限被大幅削弱
+#   （实测 yawspeed_integ 长期顶 +0.22、指令 ±200°/s 而实际仅 ±8°/s）。
+#   正解：把轮子从 CA_ROTOR0..3 拆到独立输出通道，飞行侧恢复 REV=0 + DIS=0。
+param set CA_R_REV 15
+
+# ==================== 摆臂舵机 (servo_0 / servo_1) ====================
+# 功能编号（来自 PX4 的 output_functions.yaml）：
+#   201~215 = Servo 1~15      ← 由 uORB actuator_servos 驱动（多旋翼下是 NaN）
+#   301~306 = Peripheral_via_Actuator_Set 1~6 ← 由 MAV_CMD_DO_SET_ACTUATOR 驱动 ✅
+# 选 301：可直接用 DO_SET_ACTUATOR 控制，简单且可脚本化。
+param set SIM_GZ_SV_FUNC1 301
+#
+# 只分配一路！SV_FUNC2 保持禁用（0）：
+#   模型侧已让 servo_0 / servo_1 共用同一话题 /model/airground_0/servo_0，
+#   所以 PX4 只需驱动这一路，两个臂物理级同步，不可能失步。
+param set SIM_GZ_SV_FUNC2 0
+
+# 输入值域：注意！SIM_GZ_SV_MIN/MAX/DIS/FAIL 是【0~1000 的整数】，不是 [-1,1]！
+#   源码 module.yaml 的 standard_params 定义：
+#       disarmed {min:0, max:1000, default:500}
+#       min      {min:0, max:1000, default:0}
+#       max      {min:0, max:1000, default:1000}
+#       failsafe {min:0, max:1000}
+#   mixer_module.cpp 的 updateParams() 用 param_get(..., &int32_t) 读取，
+#   越界（比如写 -1）会被拒 → 回落成上面那个 default。
+#
+# 两层映射（务必分清）：
+#   第 1 层  mixer_module（-> outputs[i]，范围 [0,1000]）：
+#       收到 DO_SET_ACTUATOR:  outputs = interpolate(param1, -1,1,  MIN1, MAX1)
+#       没收到命令（NAN）  :  outputs = DIS1
+#   第 2 层  GZMixingInterfaceServo（-> 关节角度）：
+#       angle = MINA1 + (MAXA1-MINA1) * (outputs - MIN1) / (MAX1 - MIN1)
+#
+# 所以取 MIN1=0 / MAX1=1000，第 1 层就是恒等变换，查表最直观：
+#       param1 = -1  ->  outputs=0    -> angle = 0°
+#       param1 =  0  ->  outputs=500  -> angle = 26°
+#       param1 = +1  ->  outputs=1000 -> angle = 52°
+param set SIM_GZ_SV_MIN1  0
+param set SIM_GZ_SV_MAX1  1000
+
+# 角度范围（度）—— 对应 URDF 里摆臂的 0 ~ 0.9076 rad
+param set SIM_GZ_SV_MINA1 0
+param set SIM_GZ_SV_MAXA1 52
+
+# 未解锁 → outputs = DIS1 = 0 → angle = MINA1 = 0°（摆臂水平 = 飞行安全位）
+# 失效保护 → 同上，也停在 0°
+param set SIM_GZ_SV_DIS1  0
+param set SIM_GZ_SV_FAIL1 0
+
+# ==================== 地面驱动模块 =====================
+# GROUND_DRIVE 外部模式：摆臂摆到 52° 后从 QGC / `commander mode extN` 切进去，
+# 该模块独占 actuator_motors（飞行模式下常驻但不写电机，arming check 也不干扰）。
+# ⚠️ 若模块没编译进去（CONFIG_MODULES_GROUND_DRIVE=n），
+#    这一行只会打印 unknown command，不影响其它启动流程。
+
+# 地面标定（强制覆盖，防被 parameters.bson 里的旧值顶掉）
+#   GD_MAX_OMEGA 必须 == model.sdf 里 AirGroundMux 的 <wheel_max_omega>(2400)，
+#   否则「指令速度 ≠ 实际速度」。
+#   轮顶速 = 2400/64 × 0.04 = 1.5 m/s；GD_MAX_SPEED=1.2 留 20% 余量给转向。
+param set GD_MAX_OMEGA 2400
+param set GD_MAX_SPEED 1.2
+# 满舵时纵向速度精确归零（纯原地搓转）。必须显式写：
+# 一旦 PX4 正常退出把参数存进 parameters.bson，module.yaml 的默认值就再也顶不掉了。
+param set GD_TURN_SLOW 1.0
+
+# ⚠️ 仅 SITL：开启 prearmed，让 187（QGC Actions 按钮）在未解锁时也能驱动舵机。
+#   背景：mixer_module.cpp:461 只有在 armed 或 (prearmed && allowPrearmControl())
+#        时才把函数值输出给执行器，否则回落 DIS。187 于是“被锁存但不生效”。
+#         而 310（Actuators 滑条）带 1 s 超时，离开页面就回落，没法把摆臂钉住。
+#   ⇒ 没这一行，未解锁阶段唯一能摆臂的办法就是一直待在 Actuators 页面，
+#     一去点 Actions 摆臂就弹回 0°（实测）。
+#   代价：prearmed = 所有输出通道带电（电机值仍为 500=停，但电调处于待命态）。
+#   ⚠️ 真机 airframe 里**不要**这样设，带桨时 prearmed 是危险的。
+param set COM_PREARM_MODE 2
+
+ground_drive start

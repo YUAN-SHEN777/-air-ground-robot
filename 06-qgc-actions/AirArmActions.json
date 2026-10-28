@@ -1,0 +1,122 @@
+{
+    "version": 1,
+    "fileType": "MavlinkActions",
+    "actions": [
+        {
+            "label": "▲ Arm（解锁）",
+            "description": "MAV_CMD_COMPONENT_ARM_DISARM(400) param1=1 param2=0（不带 force）。★地面模式下用这个，不要用 Takeoff！Takeoff 会切 AUTO_TAKEOFF，直接踢掉 GROUND_DRIVE。前置条件：摆臂 ≥ 48°。",
+            "mavCmd": 400,
+            "compId": 1,
+            "param1": 1.0,
+            "param2": 0.0
+        },
+        {
+            "label": "▼ Disarm（上锁）",
+            "description": "MAV_CMD_COMPONENT_ARM_DISARM(400) param1=0 param2=0。若被拒（not landed），地面模式下加 param2=21196 强制。",
+            "mavCmd": 400,
+            "compId": 1,
+            "param1": 0.0,
+            "param2": 0.0
+        },
+        {
+            "label": "▶ 进入地面模式 (GROUND_DRIVE)",
+            "description": "★进入地面驾驶★ MAV_CMD_DO_SET_MODE(176)：param1=1(CUSTOM_MODE_ENABLED) param2=4(MAIN_MODE_AUTO) param3=11(SUB_MODE_EXTERNAL1) → nav_state=23。QGC 的模式下拉里看不到外部模式，只能靠这个按钮切。必须先摆到【≥ 48°】且【未解锁】。",
+            "mavCmd": 176,
+            "compId": 1,
+            "param1": 1,
+            "param2": 4,
+            "param3": 11,
+            "param7": 0
+        },
+        {
+            "label": "■ 回到 Position 模式",
+            "description": "退出地面模式。切回标准 Position 模式后 control_allocator 重新接管 actuator_motors，飞行链路恢复。切换前请先停稳、最好先 Disarm。",
+            "mavCmd": 176,
+            "compId": 1,
+            "param1": 1,
+            "param2": 3,
+            "param3": 0,
+            "param7": 0
+        },
+        {
+            "label": "️ 摆臂 0° (飞行安全位)",
+            "description": "★安全位★ MAV_CMD_DO_SET_ACTUATOR(187) param1=-1.0 → 输出 0 → 关节 0°。起飞前 / 飞行中摆臂必须在此位置。",
+            "mavCmd": 187,
+            "compId": 1,
+            "param1": -1.0,
+            "param7": 0
+        },
+        {
+            "label": "摆臂 6.5°",
+            "description": "MAV_CMD_DO_SET_ACTUATOR(187) param1=-0.75 → 关节 6.5°。",
+            "mavCmd": 187,
+            "compId": 1,
+            "param1": -0.75,
+            "param7": 0
+        },
+        {
+            "label": "摆臂 13°",
+            "description": "MAV_CMD_DO_SET_ACTUATOR(187) param1=-0.5 → 关节 13°。",
+            "mavCmd": 187,
+            "compId": 1,
+            "param1": -0.5,
+            "param7": 0
+        },
+        {
+            "label": "摆臂 19.5°",
+            "description": "MAV_CMD_DO_SET_ACTUATOR(187) param1=-0.25 → 关节 19.5°。",
+            "mavCmd": 187,
+            "compId": 1,
+            "param1": -0.25,
+            "param7": 0
+        },
+        {
+            "label": "摆臂 26° (中间)",
+            "description": "MAV_CMD_DO_SET_ACTUATOR(187) param1=0.0 → 输出 500 → 关节 26°。",
+            "mavCmd": 187,
+            "compId": 1,
+            "param1": 0.0,
+            "param7": 0
+        },
+        {
+            "label": "摆臂 32.5°",
+            "description": "MAV_CMD_DO_SET_ACTUATOR(187) param1=0.25 → 关节 32.5°。",
+            "mavCmd": 187,
+            "compId": 1,
+            "param1": 0.25,
+            "param7": 0
+        },
+        {
+            "label": "摆臂 39°",
+            "description": "MAV_CMD_DO_SET_ACTUATOR(187) param1=0.5 → 关节 39°。",
+            "mavCmd": 187,
+            "compId": 1,
+            "param1": 0.5,
+            "param7": 0
+        },
+        {
+            "label": "摆臂 45.5°",
+            "description": "MAV_CMD_DO_SET_ACTUATOR(187) param1=0.75 → 关节 45.5°。",
+            "mavCmd": 187,
+            "compId": 1,
+            "param1": 0.75,
+            "param7": 0
+        },
+        {
+            "label": "摆臂 48° (地面模式门限)",
+            "description": "★刚好过门限★ MAV_CMD_DO_SET_ACTUATOR(187) param1=0.85 → 关节 48.1°。GD_ARM_MIN_DEG = 48、mux 的 <arm_threshold_deg> = 48，所以 48° 是能驱动轮子的最低角。这里给 48.1° 是为了比阀值高 0.1°，避开浮点/取整边界（精确 48° 写成 param1=0.8462）。实测转向能力处在 52°(17%) 与 45°(33%) 之间，只能当过渡档用。",
+            "mavCmd": 187,
+            "compId": 1,
+            "param1": 0.85,
+            "param7": 0
+        },
+        {
+            "label": "摆臂 52° (地面行驶位)",
+            "description": "MAV_CMD_DO_SET_ACTUATOR(187) param1=1.0 → 输出 1000 → 关节 52°。轮盘立起的地面行驶位。",
+            "mavCmd": 187,
+            "compId": 1,
+            "param1": 1.0,
+            "param7": 0
+        }
+    ]
+}

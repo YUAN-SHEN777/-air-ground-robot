@@ -1,0 +1,919 @@
+<sdf version='1.11'>
+  <model name='airground'>
+    <self_collide>false</self_collide>
+    <pose>0 0 0.05 0 0 0</pose>
+    <link name='base_link'>
+      <inertial>
+        <pose>-0.046668260000000003 1.225e-05 0.022721749999999999 0 0 0</pose>
+        <mass>0.12128087</mass>
+        <inertia>
+          <ixx>6.4490000000000001e-05</ixx>
+          <ixy>0</ixy>
+          <ixz>-3.4209999999999999e-05</ixz>
+          <iyy>0.00033419</iyy>
+          <iyz>1e-08</iyz>
+          <izz>0.00030231000000000002</izz>
+        </inertia>
+      </inertial>
+      <collision name='base_link_collision'>
+        <pose>-0.0557 0 0.042200000000000001 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>0.16109999999999999 0.069500000000000006 0.084400000000000003</size>
+          </box>
+        </geometry>
+        <surface>
+          <contact>
+            <ode/>
+          </contact>
+          <friction>
+            <ode/>
+          </friction>
+        </surface>
+      </collision>
+      <visual name='base_link_visual'>
+        <pose>0 0 0 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>model://airground/meshes/base_collision.stl</uri>
+          </mesh>
+        </geometry>
+        <material>
+          <diffuse>0.990196109 1 1 1</diffuse>
+          <ambient>0.990196109 1 1 1</ambient>
+        </material>
+      </visual>
+      <self_collide>false</self_collide>
+    
+      <!-- ⚠️ 绝对不能写 <topic>！PX4 靠【默认话题路径】订阅：
+             /world/<world>/model/<model>/link/<link>/sensor/<sensor>/<type>
+           一旦自定义 <topic>，路径被改掉，PX4 就收不到了（踩过这个坑）
+
+           下面的配置子元素（<imu>/<magnetometer>/<air_pressure>）与 PX4 官方
+           x500 模型【逐字节一致】。之前试过只写名字+频率的"裸"传感器，结果
+           PX4 一直报 STALE，所以这里保留完整配置。 -->
+      <sensor name="air_pressure_sensor" type="air_pressure">
+        <gz_frame_id>base_link</gz_frame_id>
+        <always_on>1</always_on>
+        <update_rate>50</update_rate>
+        <air_pressure>
+          <pressure>
+            <noise type="gaussian">
+              <mean>0</mean>
+              <stddev>3</stddev>
+            </noise>
+          </pressure>
+        </air_pressure>
+      </sensor>
+      <sensor name="magnetometer_sensor" type="magnetometer">
+        <gz_frame_id>base_link</gz_frame_id>
+        <always_on>1</always_on>
+        <update_rate>100</update_rate>
+        <magnetometer>
+          <x>
+            <noise type="gaussian">
+              <stddev>0.0001</stddev>
+            </noise>
+          </x>
+          <y>
+            <noise type="gaussian">
+              <stddev>0.0001</stddev>
+            </noise>
+          </y>
+          <z>
+            <noise type="gaussian">
+              <stddev>0.0001</stddev>
+            </noise>
+          </z>
+        </magnetometer>
+      </sensor>
+      <sensor name="imu_sensor" type="imu">
+        <gz_frame_id>base_link</gz_frame_id>
+        <always_on>1</always_on>
+        <update_rate>250</update_rate>
+        <imu>
+          <angular_velocity>
+            <x>
+              <noise type="gaussian">
+                <mean>0.0</mean>
+                <stddev>0.0008726646</stddev>
+              </noise>
+            </x>
+            <y>
+              <noise type="gaussian">
+                <mean>0.0</mean>
+                <stddev>0.0008726646</stddev>
+              </noise>
+            </y>
+            <z>
+              <noise type="gaussian">
+                <mean>0.0</mean>
+                <stddev>0.0008726646</stddev>
+              </noise>
+            </z>
+          </angular_velocity>
+          <linear_acceleration>
+            <x>
+              <noise type="gaussian">
+                <mean>0.0</mean>
+                <stddev>0.00637</stddev>
+              </noise>
+            </x>
+            <y>
+              <noise type="gaussian">
+                <mean>0.0</mean>
+                <stddev>0.00637</stddev>
+              </noise>
+            </y>
+            <z>
+              <noise type="gaussian">
+                <mean>0.0</mean>
+                <stddev>0.00686</stddev>
+              </noise>
+            </z>
+          </linear_acceleration>
+        </imu>
+      </sensor>
+      <sensor name="navsat_sensor" type="navsat">
+        <gz_frame_id>base_link</gz_frame_id>
+        <always_on>1</always_on>
+        <update_rate>30</update_rate>
+      </sensor>
+</link>
+    <joint name='servo_0' type='revolute'>
+      <pose relative_to='base_link'>0.0064999999999999997 -0.0275 0.021000000000000001 0 0 0</pose>
+      <parent>base_link</parent>
+      <child>link9</child>
+      <axis>
+        <xyz>1 0 0</xyz>
+        <limit>
+          <lower>0</lower>
+          <upper>0.90759999999999996</upper>
+          <effort>0.69999999999999996</effort>
+          <velocity>13</velocity>
+        </limit>
+        <dynamics>
+          <damping>0.20000000000000001</damping>
+          <friction>0</friction>
+          <spring_reference>0</spring_reference>
+          <spring_stiffness>0</spring_stiffness>
+        </dynamics>
+      </axis>
+    </joint>
+    <link name='link9'>
+      <pose relative_to='servo_0'>0 0 0 0 0 0</pose>
+      <inertial>
+        <pose>-0.058790460000000003 -0.060702390000000002 0.0017487500000000001 0 0 0</pose>
+        <mass>0.16704595</mass>
+        <inertia>
+          <ixx>0.00016241000000000001</ixx>
+          <ixy>-2.9459999999999999e-05</ixy>
+          <ixz>-6.1999999999999999e-07</ixz>
+          <iyy>0.00097681000000000005</iyy>
+          <iyz>7.9699999999999999e-06</iyz>
+          <izz>0.0010755999999999999</izz>
+        </inertia>
+      </inertial>
+      <collision name='link9_collision'>
+        <pose>-0.068500000000000005 -0.043299999999999998 0.011299999999999999 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>0.26340000000000002 0.1215 0.070699999999999999</size>
+          </box>
+        </geometry>
+        <surface>
+          <contact>
+            <ode/>
+          </contact>
+          <friction>
+            <ode/>
+          </friction>
+        </surface>
+      </collision>
+      <visual name='link9_visual'>
+        <pose>0 0 0 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>model://airground/meshes/link9_collision.stl</uri>
+          </mesh>
+        </geometry>
+        <material>
+          <diffuse>0.990196109 1 1 1</diffuse>
+          <ambient>0.990196109 1 1 1</ambient>
+        </material>
+      </visual>
+      <self_collide>false</self_collide>
+    </link>
+    <joint name='joint3' type='revolute'>
+      <pose relative_to='link9'>0.036499999999999998 -0.082500000000000004 0.033790000000000001 0 0 0</pose>
+      <parent>link9</parent>
+      <child>link1</child>
+      <axis>
+        <xyz>0 0 1</xyz>
+        <limit>
+          <effort>0.25</effort>
+          <velocity>3400</velocity>
+          <lower>-inf</lower>
+          <upper>inf</upper>
+        </limit>
+        <dynamics>
+          <spring_reference>0</spring_reference>
+          <spring_stiffness>0</spring_stiffness>
+        </dynamics>
+      </axis>
+    </joint>
+    <link name='link1'>
+      <pose relative_to='joint3'>0 0 0 0 0 0</pose>
+      <inertial>
+        <pose>-6.6000000000000003e-07 -1.3999999999999999e-06 0.0041483600000000002 0 0 0</pose>
+        <mass>0.0034512599999999998</mass>
+        <inertia>
+          <ixx>2.5600000000000001e-06</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>2.5500000000000001e-06</iyy>
+          <iyz>0</iyz>
+          <izz>5.1000000000000003e-06</izz>
+        </inertia>
+      </inertial>
+      <collision name='link1_collision'>
+        <pose>0.012800000000000001 -0.0051000000000000004 0.0035000000000000001 0 0 0</pose>
+        <geometry>
+          <cylinder>
+            <length>0.0070000000000000001</length>
+            <radius>0.065000000000000002</radius>
+          </cylinder>
+        </geometry>
+        <surface>
+          <contact>
+            <ode/>
+          </contact>
+          <friction>
+            <ode>
+              <mu>0.29999999999999999</mu>
+              <mu2>0.29999999999999999</mu2>
+            </ode>
+          </friction>
+        </surface>
+      </collision>
+      <visual name='link1_visual'>
+        <pose>0 0 0 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>model://airground/meshes/link1_collision.stl</uri>
+          </mesh>
+        </geometry>
+        <material>
+          <diffuse>0.387254924 0.387254924 0.387254924 1</diffuse>
+          <ambient>0.387254924 0.387254924 0.387254924 1</ambient>
+        </material>
+      </visual>
+    </link>
+    <joint name='joint5' type='revolute'>
+      <pose relative_to='link9'>-0.17349999999999999 -0.082500000000000004 0.033790000000000001 0 0 0</pose>
+      <parent>link9</parent>
+      <child>link3</child>
+      <axis>
+        <xyz>0 0 -1</xyz>
+        <limit>
+          <effort>0.25</effort>
+          <velocity>3400</velocity>
+          <lower>-inf</lower>
+          <upper>inf</upper>
+        </limit>
+        <dynamics>
+          <spring_reference>0</spring_reference>
+          <spring_stiffness>0</spring_stiffness>
+        </dynamics>
+      </axis>
+    </joint>
+    <link name='link3'>
+      <pose relative_to='joint5'>0 0 0 0 0 0</pose>
+      <inertial>
+        <pose>9.9999999999999995e-08 1.5e-06 0.0041483700000000002 0 0 0</pose>
+        <mass>0.0034512800000000001</mass>
+        <inertia>
+          <ixx>2.5600000000000001e-06</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>2.5500000000000001e-06</iyy>
+          <iyz>0</iyz>
+          <izz>5.1000000000000003e-06</izz>
+        </inertia>
+      </inertial>
+      <collision name='link3_collision'>
+        <pose>-0.0061999999999999998 0.0118 0.0035000000000000001 0 0 0</pose>
+        <geometry>
+          <cylinder>
+            <length>0.0070000000000000001</length>
+            <radius>0.065000000000000002</radius>
+          </cylinder>
+        </geometry>
+        <surface>
+          <contact>
+            <ode/>
+          </contact>
+          <friction>
+            <ode>
+              <mu>0.29999999999999999</mu>
+              <mu2>0.29999999999999999</mu2>
+            </ode>
+          </friction>
+        </surface>
+      </collision>
+      <visual name='link3_visual'>
+        <pose>0 0 0 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>model://airground/meshes/link3_collision.stl</uri>
+          </mesh>
+        </geometry>
+        <material>
+          <diffuse>0.387254924 0.387254924 0.387254924 1</diffuse>
+          <ambient>0.387254924 0.387254924 0.387254924 1</ambient>
+        </material>
+      </visual>
+    </link>
+    <joint name='joint7' type='revolute'>
+      <pose relative_to='link9'>0.036499999999999998 -0.082500000000000004 -0.017999999999999999 0 0 0</pose>
+      <parent>link9</parent>
+      <child>link5</child>
+      <axis>
+        <xyz>0 0 -1</xyz>
+        <limit>
+          <effort>15</effort>
+          <velocity>50</velocity>
+          <lower>-inf</lower>
+          <upper>inf</upper>
+        </limit>
+        <dynamics>
+          <spring_reference>0</spring_reference>
+          <spring_stiffness>0</spring_stiffness>
+        </dynamics>
+      </axis>
+    </joint>
+    <link name='link5'>
+      <pose relative_to='joint7'>0 0 0 0 0 0</pose>
+      <inertial>
+        <pose>-6.3e-07 9.4e-07 -0.012907429999999999 0 0 0</pose>
+        <mass>0.052680789999999998</mass>
+        <inertia>
+          <ixx>1.082e-05</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>1.082e-05</iyy>
+          <iyz>0</iyz>
+          <izz>1.7920000000000001e-05</izz>
+        </inertia>
+      </inertial>
+      <collision name='link5_collision'>
+        <pose>0 0 -0.0070000000000000001 0 0 0</pose>
+        <geometry>
+          <cylinder>
+            <length>0.034000000000000002</length>
+            <radius>0.040000000000000001</radius>
+          </cylinder>
+        </geometry>
+        <surface>
+          <contact>
+            <ode/>
+          </contact>
+          <friction>
+            <ode>
+              <mu>0.40000000000000002</mu>
+              <mu2>0.40000000000000002</mu2>
+            </ode>
+          </friction>
+        </surface>
+      </collision>
+      <visual name='link5_visual'>
+        <pose>0 0 0 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>model://airground/meshes/link5_collision.stl</uri>
+          </mesh>
+        </geometry>
+        <material>
+          <diffuse>0.875 0.875 0.9375 1</diffuse>
+          <ambient>0.875 0.875 0.9375 1</ambient>
+        </material>
+      </visual>
+    </link>
+    <joint name='joint9' type='revolute'>
+      <pose relative_to='link9'>-0.17349999999999999 -0.082500000000000004 -0.017999999999999999 0 0 0</pose>
+      <parent>link9</parent>
+      <child>link7</child>
+      <axis>
+        <xyz>0 0 -1</xyz>
+        <limit>
+          <effort>15</effort>
+          <velocity>50</velocity>
+          <lower>-inf</lower>
+          <upper>inf</upper>
+        </limit>
+        <dynamics>
+          <spring_reference>0</spring_reference>
+          <spring_stiffness>0</spring_stiffness>
+        </dynamics>
+      </axis>
+    </joint>
+    <link name='link7'>
+      <pose relative_to='joint9'>0 0 0 0 0 0</pose>
+      <inertial>
+        <pose>-6.3e-07 9.4e-07 -0.012907429999999999 0 0 0</pose>
+        <mass>0.052680789999999998</mass>
+        <inertia>
+          <ixx>1.082e-05</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>1.082e-05</iyy>
+          <iyz>0</iyz>
+          <izz>1.7920000000000001e-05</izz>
+        </inertia>
+      </inertial>
+      <collision name='link7_collision'>
+        <pose>0 0 -0.0070000000000000001 0 0 0</pose>
+        <geometry>
+          <cylinder>
+            <length>0.034000000000000002</length>
+            <radius>0.040000000000000001</radius>
+          </cylinder>
+        </geometry>
+        <surface>
+          <contact>
+            <ode/>
+          </contact>
+          <friction>
+            <ode>
+              <mu>0.40000000000000002</mu>
+              <mu2>0.40000000000000002</mu2>
+            </ode>
+          </friction>
+        </surface>
+      </collision>
+      <visual name='link7_visual'>
+        <pose>0 0 0 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>model://airground/meshes/link7_collision.stl</uri>
+          </mesh>
+        </geometry>
+        <material>
+          <diffuse>0.875 0.875 0.9375 1</diffuse>
+          <ambient>0.875 0.875 0.9375 1</ambient>
+        </material>
+      </visual>
+    </link>
+    <joint name='servo_1' type='revolute'>
+      <pose relative_to='base_link'>0.0064999999999999997 0.0275 0.021000000000000001 0 0 0</pose>
+      <parent>base_link</parent>
+      <child>link10</child>
+      <axis>
+        <xyz>-1 0 0</xyz>
+        <limit>
+          <lower>0</lower>
+          <upper>0.90759999999999996</upper>
+          <effort>0.69999999999999996</effort>
+          <velocity>13</velocity>
+        </limit>
+        <dynamics>
+          <damping>0.20000000000000001</damping>
+          <friction>0</friction>
+          <spring_reference>0</spring_reference>
+          <spring_stiffness>0</spring_stiffness>
+        </dynamics>
+      </axis>
+    </joint>
+    <link name='link10'>
+      <pose relative_to='servo_1'>0 0 0 0 0 0</pose>
+      <inertial>
+        <pose>-0.0723525 0.060617949999999997 0.0017130699999999999 0 0 0</pose>
+        <mass>0.16700574000000001</mass>
+        <inertia>
+          <ixx>0.00016365999999999999</ixx>
+          <ixy>2.8200000000000001e-05</ixy>
+          <ixz>3.0400000000000001e-06</ixz>
+          <iyy>0.00098992000000000004</iyy>
+          <iyz>-8.0900000000000005e-06</iyz>
+          <izz>0.0010899799999999999</izz>
+        </inertia>
+      </inertial>
+      <collision name='link10_collision'>
+        <pose>-0.068500000000000005 0.043400000000000001 0.0112 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>0.26340000000000002 0.121 0.070499999999999993</size>
+          </box>
+        </geometry>
+        <surface>
+          <contact>
+            <ode/>
+          </contact>
+          <friction>
+            <ode/>
+          </friction>
+        </surface>
+      </collision>
+      <visual name='link10_visual'>
+        <pose>0 0 0 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>model://airground/meshes/link10_collision.stl</uri>
+          </mesh>
+        </geometry>
+        <material>
+          <diffuse>0.990196109 1 1 1</diffuse>
+          <ambient>0.990196109 1 1 1</ambient>
+        </material>
+      </visual>
+      <self_collide>false</self_collide>
+    </link>
+    <joint name='joint10' type='revolute'>
+      <pose relative_to='link10'>-0.17349999999999999 0.082500000000000004 -0.017999999999999999 0 0 0</pose>
+      <parent>link10</parent>
+      <child>link8</child>
+      <axis>
+        <xyz>0 0 1</xyz>
+        <limit>
+          <effort>15</effort>
+          <velocity>50</velocity>
+          <lower>-inf</lower>
+          <upper>inf</upper>
+        </limit>
+        <dynamics>
+          <spring_reference>0</spring_reference>
+          <spring_stiffness>0</spring_stiffness>
+        </dynamics>
+      </axis>
+    </joint>
+    <link name='link8'>
+      <pose relative_to='joint10'>0 0 0 0 0 0</pose>
+      <inertial>
+        <pose>6.3e-07 -9.4e-07 -0.012907429999999999 0 0 0</pose>
+        <mass>0.052680789999999998</mass>
+        <inertia>
+          <ixx>1.082e-05</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>1.082e-05</iyy>
+          <iyz>0</iyz>
+          <izz>1.7920000000000001e-05</izz>
+        </inertia>
+      </inertial>
+      <collision name='link8_collision'>
+        <pose>0 0 -0.0070000000000000001 0 0 0</pose>
+        <geometry>
+          <cylinder>
+            <length>0.034000000000000002</length>
+            <radius>0.040000000000000001</radius>
+          </cylinder>
+        </geometry>
+        <surface>
+          <contact>
+            <ode/>
+          </contact>
+          <friction>
+            <ode>
+              <mu>0.40000000000000002</mu>
+              <mu2>0.40000000000000002</mu2>
+            </ode>
+          </friction>
+        </surface>
+      </collision>
+      <visual name='link8_visual'>
+        <pose>0 0 0 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>model://airground/meshes/link8_collision.stl</uri>
+          </mesh>
+        </geometry>
+        <material>
+          <diffuse>0.875 0.875 0.9375 1</diffuse>
+          <ambient>0.875 0.875 0.9375 1</ambient>
+        </material>
+      </visual>
+    </link>
+    <joint name='joint4' type='revolute'>
+      <pose relative_to='link10'>0.036499999999999998 0.082500000000000004 0.033790000000000001 0 0 0</pose>
+      <parent>link10</parent>
+      <child>link2</child>
+      <axis>
+        <xyz>0 0 -1</xyz>
+        <limit>
+          <effort>0.25</effort>
+          <velocity>3400</velocity>
+          <lower>-inf</lower>
+          <upper>inf</upper>
+        </limit>
+        <dynamics>
+          <spring_reference>0</spring_reference>
+          <spring_stiffness>0</spring_stiffness>
+        </dynamics>
+      </axis>
+    </joint>
+    <link name='link2'>
+      <pose relative_to='joint4'>0 0 0 0 0 0</pose>
+      <inertial>
+        <pose>-8.9999999999999996e-07 1.2100000000000001e-06 0.0041483700000000002 0 0 0</pose>
+        <mass>0.0034512800000000001</mass>
+        <inertia>
+          <ixx>2.5600000000000001e-06</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>2.5500000000000001e-06</iyy>
+          <iyz>0</iyz>
+          <izz>5.1000000000000003e-06</izz>
+        </inertia>
+      </inertial>
+      <collision name='link2_collision'>
+        <pose>0.017399999999999999 -0.00029999999999999997 0.0035000000000000001 0 0 0</pose>
+        <geometry>
+          <cylinder>
+            <length>0.0070000000000000001</length>
+            <radius>0.065000000000000002</radius>
+          </cylinder>
+        </geometry>
+        <surface>
+          <contact>
+            <ode/>
+          </contact>
+          <friction>
+            <ode>
+              <mu>0.29999999999999999</mu>
+              <mu2>0.29999999999999999</mu2>
+            </ode>
+          </friction>
+        </surface>
+      </collision>
+      <visual name='link2_visual'>
+        <pose>0 0 0 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>model://airground/meshes/link2_collision.stl</uri>
+          </mesh>
+        </geometry>
+        <material>
+          <diffuse>0.387254924 0.387254924 0.387254924 1</diffuse>
+          <ambient>0.387254924 0.387254924 0.387254924 1</ambient>
+        </material>
+      </visual>
+    </link>
+    <joint name='joint6' type='revolute'>
+      <pose relative_to='link10'>-0.17349999999999999 0.082500000000000004 0.033790000000000001 0 0 0</pose>
+      <parent>link10</parent>
+      <child>link4</child>
+      <axis>
+        <xyz>0 0 1</xyz>
+        <limit>
+          <effort>0.25</effort>
+          <velocity>3400</velocity>
+          <lower>-inf</lower>
+          <upper>inf</upper>
+        </limit>
+        <dynamics>
+          <spring_reference>0</spring_reference>
+          <spring_stiffness>0</spring_stiffness>
+        </dynamics>
+      </axis>
+    </joint>
+    <link name='link4'>
+      <pose relative_to='joint6'>0 0 0 0 0 0</pose>
+      <inertial>
+        <pose>4.4999999999999998e-07 -1.48e-06 0.0041483600000000002 0 0 0</pose>
+        <mass>0.0034512599999999998</mass>
+        <inertia>
+          <ixx>2.5600000000000001e-06</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>2.5500000000000001e-06</iyy>
+          <iyz>0</iyz>
+          <izz>5.1000000000000003e-06</izz>
+        </inertia>
+      </inertial>
+      <collision name='link4_collision'>
+        <pose>-0.012200000000000001 -0.0060000000000000001 0.0035000000000000001 0 0 0</pose>
+        <geometry>
+          <cylinder>
+            <length>0.0070000000000000001</length>
+            <radius>0.065000000000000002</radius>
+          </cylinder>
+        </geometry>
+        <surface>
+          <contact>
+            <ode/>
+          </contact>
+          <friction>
+            <ode>
+              <mu>0.29999999999999999</mu>
+              <mu2>0.29999999999999999</mu2>
+            </ode>
+          </friction>
+        </surface>
+      </collision>
+      <visual name='link4_visual'>
+        <pose>0 0 0 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>model://airground/meshes/link4_collision.stl</uri>
+          </mesh>
+        </geometry>
+        <material>
+          <diffuse>0.387254924 0.387254924 0.387254924 1</diffuse>
+          <ambient>0.387254924 0.387254924 0.387254924 1</ambient>
+        </material>
+      </visual>
+    </link>
+    <joint name='joint8' type='revolute'>
+      <pose relative_to='link10'>0.036499999999999998 0.082500000000000004 -0.017999999999999999 0 0 0</pose>
+      <parent>link10</parent>
+      <child>link6</child>
+      <axis>
+        <xyz>0 0 1</xyz>
+        <limit>
+          <effort>15</effort>
+          <velocity>50</velocity>
+          <lower>-inf</lower>
+          <upper>inf</upper>
+        </limit>
+        <dynamics>
+          <spring_reference>0</spring_reference>
+          <spring_stiffness>0</spring_stiffness>
+        </dynamics>
+      </axis>
+    </joint>
+    <link name='link6'>
+      <pose relative_to='joint8'>0 0 0 0 0 0</pose>
+      <inertial>
+        <pose>6.3e-07 -9.4e-07 -0.012907429999999999 0 0 0</pose>
+        <mass>0.052680789999999998</mass>
+        <inertia>
+          <ixx>1.082e-05</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>1.082e-05</iyy>
+          <iyz>0</iyz>
+          <izz>1.7920000000000001e-05</izz>
+        </inertia>
+      </inertial>
+      <collision name='link6_collision'>
+        <pose>0 0 -0.0070000000000000001 0 0 0</pose>
+        <geometry>
+          <cylinder>
+            <length>0.034000000000000002</length>
+            <radius>0.040000000000000001</radius>
+          </cylinder>
+        </geometry>
+        <surface>
+          <contact>
+            <ode/>
+          </contact>
+          <friction>
+            <ode>
+              <mu>0.40000000000000002</mu>
+              <mu2>0.40000000000000002</mu2>
+            </ode>
+          </friction>
+        </surface>
+      </collision>
+      <visual name='link6_visual'>
+        <pose>0 0 0 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <scale>1 1 1</scale>
+            <uri>model://airground/meshes/link6_collision.stl</uri>
+          </mesh>
+        </geometry>
+        <material>
+          <diffuse>0.875 0.875 0.9375 1</diffuse>
+          <ambient>0.875 0.875 0.9375 1</ambient>
+        </material>
+      </visual>
+    </link>
+    <plugin name='gz::sim::systems::JointStatePublisher' filename='gz-sim-joint-state-publisher-system'>
+      <topic>/airground/joint_state</topic>
+      <update_rate>1000</update_rate>
+    </plugin>
+    <plugin name='gz::sim::systems::JointPositionController' filename='gz-sim-joint-position-controller-system'>
+      <joint_name>servo_0</joint_name>
+      <topic>/model/airground_0/servo_0</topic>
+      <p_gain>5</p_gain>
+      <i_gain>3</i_gain>
+      <d_gain>0.2</d_gain>
+      <i_max>0.3</i_max>
+      <i_min>-0.3</i_min>
+      <cmd_max>3.0</cmd_max>
+      <cmd_min>-3.0</cmd_min>
+      <initial_position>0</initial_position>
+    </plugin>
+    <plugin name='gz::sim::systems::JointPositionController' filename='gz-sim-joint-position-controller-system'>
+      <joint_name>servo_1</joint_name>
+      <topic>/model/airground_0/servo_0</topic>
+      <p_gain>5</p_gain>
+      <i_gain>3</i_gain>
+      <d_gain>0.2</d_gain>
+      <i_max>0.3</i_max>
+      <i_min>-0.3</i_min>
+      <cmd_max>3.0</cmd_max>
+      <cmd_min>-3.0</cmd_min>
+      <initial_position>0</initial_position>
+    </plugin>
+    <!-- 空-地（机械切换）仿真器：摆臂 >= 48 度时把电机命令送给轮子并让桨停，
+         飞行位则原样转发给桨。源码见 px4_changes/gz_plugins/airground_mux/。
+         filename 用绝对路径（libairground_mux.so 由 install_sim_plugin.sh 拷贝）。 -->
+    <plugin name='airground::AirGroundMux' filename='/home/yuan/PX4-Autopilot/Tools/simulation/gz/models/airground/libairground_mux.so'>
+      <servo_joint>servo_0</servo_joint>
+      <arm_threshold_deg>48</arm_threshold_deg>
+      <wheel_joints>joint7 joint8 joint9 joint10</wheel_joints>
+      <wheel_signs>1 1 1 1</wheel_signs>
+      <gear_ratio>64</gear_ratio>
+      <motor_max_omega>1000</motor_max_omega>
+      <wheel_max_omega>2400</wheel_max_omega>
+      <zero_offset>500</zero_offset>
+      <half_span>500</half_span>
+    </plugin>
+    <plugin name='gz::sim::systems::MulticopterMotorModel' filename='gz-sim-multicopter-motor-model-system'>
+      <jointName>joint3</jointName>
+      <linkName>link1</linkName>
+      <turningDirection>ccw</turningDirection>
+      <timeConstantUp>0.0125</timeConstantUp>
+      <timeConstantDown>0.025</timeConstantDown>
+      <maxRotVelocity>1000.0</maxRotVelocity>
+      <motorConstant>5.002070e-06</motorConstant>
+      <momentConstant>2.501035e-07</momentConstant>
+      <commandSubTopic>command/prop_speed</commandSubTopic>
+      <motorNumber>0</motorNumber>
+      <actuator_number>0</actuator_number>
+      <rotorDragCoefficient>0</rotorDragCoefficient>
+      <rollingMomentCoefficient>0</rollingMomentCoefficient>
+      <rotorVelocitySlowdownSim>10</rotorVelocitySlowdownSim>
+      <motorType>velocity</motorType>
+    </plugin>
+    <plugin name='gz::sim::systems::MulticopterMotorModel' filename='gz-sim-multicopter-motor-model-system'>
+      <jointName>joint4</jointName>
+      <linkName>link2</linkName>
+      <turningDirection>ccw</turningDirection>
+      <timeConstantUp>0.0125</timeConstantUp>
+      <timeConstantDown>0.025</timeConstantDown>
+      <maxRotVelocity>1000.0</maxRotVelocity>
+      <motorConstant>5.002070e-06</motorConstant>
+      <momentConstant>2.501035e-07</momentConstant>
+      <commandSubTopic>command/prop_speed</commandSubTopic>
+      <motorNumber>1</motorNumber>
+      <actuator_number>1</actuator_number>
+      <rotorDragCoefficient>0</rotorDragCoefficient>
+      <rollingMomentCoefficient>0</rollingMomentCoefficient>
+      <rotorVelocitySlowdownSim>10</rotorVelocitySlowdownSim>
+      <motorType>velocity</motorType>
+    </plugin>
+    <plugin name='gz::sim::systems::MulticopterMotorModel' filename='gz-sim-multicopter-motor-model-system'>
+      <jointName>joint5</jointName>
+      <linkName>link3</linkName>
+      <turningDirection>ccw</turningDirection>
+      <timeConstantUp>0.0125</timeConstantUp>
+      <timeConstantDown>0.025</timeConstantDown>
+      <maxRotVelocity>1000.0</maxRotVelocity>
+      <motorConstant>5.002070e-06</motorConstant>
+      <momentConstant>2.501035e-07</momentConstant>
+      <commandSubTopic>command/prop_speed</commandSubTopic>
+      <motorNumber>2</motorNumber>
+      <actuator_number>2</actuator_number>
+      <rotorDragCoefficient>0</rotorDragCoefficient>
+      <rollingMomentCoefficient>0</rollingMomentCoefficient>
+      <rotorVelocitySlowdownSim>10</rotorVelocitySlowdownSim>
+      <motorType>velocity</motorType>
+    </plugin>
+    <plugin name='gz::sim::systems::MulticopterMotorModel' filename='gz-sim-multicopter-motor-model-system'>
+      <jointName>joint6</jointName>
+      <linkName>link4</linkName>
+      <turningDirection>ccw</turningDirection>
+      <timeConstantUp>0.0125</timeConstantUp>
+      <timeConstantDown>0.025</timeConstantDown>
+      <maxRotVelocity>1000.0</maxRotVelocity>
+      <motorConstant>5.002070e-06</motorConstant>
+      <momentConstant>2.501035e-07</momentConstant>
+      <commandSubTopic>command/prop_speed</commandSubTopic>
+      <motorNumber>3</motorNumber>
+      <actuator_number>3</actuator_number>
+      <rotorDragCoefficient>0</rotorDragCoefficient>
+      <rollingMomentCoefficient>0</rollingMomentCoefficient>
+      <rotorVelocitySlowdownSim>10</rotorVelocitySlowdownSim>
+      <motorType>velocity</motorType>
+    </plugin>
+    <frame name='ref_ref1_frame' attached_to='base_link'>
+      <pose>0 0 0 0 0 0</pose>
+    </frame>
+    <frame name='ref_ref1' attached_to='ref_ref1_frame'>
+      <pose>0 0 0 0 0 0</pose>
+    </frame>
+  </model>
+</sdf>

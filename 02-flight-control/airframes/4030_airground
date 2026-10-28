@@ -1,0 +1,218 @@
+#!/bin/sh
+#
+# @name Air-Ground Robot (props share motors with wheels)
+#
+# @type Quadrotor x
+# @class Copter
+#
+# @maintainer yuan
+#
+# 空陆两栖机器人：4 个电机，桨与轮 XY 完全同轴（同一个电机驱动），
+# 地面侧经 64:1 行星减速器，空中/地面由机构切换。
+#
+# 与仿真空气帧 init.d-posix/airframes/4030_gz_airground 的对应关系：
+#   SIM_GZ_EC_FUNC1..4 = 101..104  →  PWM_MAIN_FUNC1..4 = 101..104 + PWM_MAIN_TIM0
+#   SIM_GZ_SV_FUNC1    = 301       →  PWM_MAIN_FUNC9     = 301（+ FUNC10 同号同步）
+#   SIM_GZ_EC_DISn     = 500       →  DShot 3D 下默认 1000 即中位，不用改
+#   SIM_GZ_SV_MINA/MAXA            →  PWM_MAIN_MIN9/MAX9（µs，需实测标定）
+#
+# ⚠️ 本文件所有【接口类】参数用 param set 强制覆盖，理由同仿真：
+#    PX4 会把参数持久化到 /fs/microsd/params，一旦某次运行时改过，
+#    airframe 里的 set-default 就永远不再生效（表现为"改了没反应"）。
+#    【调参类】（MPC_THR_HOVER 等）保留 set-default，允许现场覆盖。
+#
+
+. ${R}etc/init.d/rc.mc_defaults
+
+# ==================== 机体几何（控制分配）====================
+# CA_AIRFRAME=0 = 通用多旋翼，几何完全由 CA_ROTOR* 手工给定
+param set CA_AIRFRAME 0
+param set CA_ROTOR_COUNT 4
+
+# 桨0 前左
+param set CA_ROTOR0_PX +0.1008
+param set CA_ROTOR0_PY +0.1100
+param set CA_ROTOR0_KM +0.05
+
+# 桨1 前右
+param set CA_ROTOR1_PX +0.1008
+param set CA_ROTOR1_PY -0.1100
+param set CA_ROTOR1_KM -0.05
+
+# 桨2 后左
+param set CA_ROTOR2_PX -0.1092
+param set CA_ROTOR2_PY +0.1100
+param set CA_ROTOR2_KM -0.05
+
+# 桨3 后右
+param set CA_ROTOR3_PX -0.1092
+param set CA_ROTOR3_PY -0.1100
+param set CA_ROTOR3_KM +0.05
+#
+# ⚠️ KM 符号 = 该桨在【世界坐标】下的旋转方向，不是简单的对角配对。
+#    规格书原文：「符号方向必须实测验证，若偏航反向就把四个符号全部取反」。
+#    验证方法见 docs/实机调试步骤.md「阶段 8」。
+
+# ==================== 电机输出（micoair h743-v2）====================
+# 本板 DIRECT_PWM_OUTPUT_CHANNELS = 10，无 IO 协处理器 → 参数前缀是 PWM_MAIN。
+# 定时器分组（Tools/module_config/output_groups_from_timer_config.py 实测）：
+#
+#   输出     定时器    DMA/DShot   协议参数
+#   1-4      TIM1      ✅          PWM_MAIN_TIM0   ← 4 个电机
+#   5-6      TIM3      ✅          PWM_MAIN_TIM1
+#   7-8      TIM4      ✅          PWM_MAIN_TIM2
+#   9-10     TIM15     ❌ 无 DMA   PWM_MAIN_TIM3   ← 2 个摆臂舵机
+#
+# ⚠️ PWM_MAIN_TIMn 的 n 是 io_timers[] 数组下标（从 0 开始），
+#    不是硬件定时器号：TIM1→TIM0、TIM3→TIM1、TIM4→TIM2、TIM15→TIM3。
+param set PWM_MAIN_FUNC1 101
+param set PWM_MAIN_FUNC2 102
+param set PWM_MAIN_FUNC3 103
+param set PWM_MAIN_FUNC4 104
+
+# 输出协议取值（pwm_out/module.yaml 枚举，注意负数顺序是反的）：
+#   -8=BDShot150  -7=BDShot300  -6=BDShot600
+#   -5=DShot150   -4=DShot300   -3=DShot600   -1=OneShot
+#   50/100/200/400 = PWM 频率
+# 选 -4 = DShot300：与板级 rc.board_defaults 的默认值一致，是 bring-up 阶段
+# 最稳的档位（DShot600 对走线质量更敏感，先不用）。
+# 只有 TIM0 这一组切 DShot；下面 TIM3 保持 PWM50 给舵机。
+param set PWM_MAIN_TIM0 -4
+
+# 电机 MIN/MAX/DIS 不用写：
+#   DShot 模式下 min/max 参数被隐藏且忽略（mixer_module 用 0..1999 + 3D 缩放），
+#   PWM_MAIN_DIS1..4 默认 1000 ≈ DShot 3D 中位（DSHOT_3D_SPLIT），即"停"。
+#   ⚠️ 上电必须实测确认：未解锁时电机静止。
+
+# ==================== 电机双向（地面倒车必需）====================
+# 4 路电机全部标记为可逆。
+#   实车：DShot 驱动靠该位启用 3D —— apply_min_values() 把可逆通道的 min 改成 48，
+#         使 control=0 正好落在 DSHOT_3D_SPLIT，实现"负值反转"。
+#   ⚠️ 前提：4 个电调必须刷【Bluejay 3D】或【AM32】双向固件。
+#      原生 BLHeli_S 单向固件下负指令会被当 0，表现是"只能前进、倒不了车"。
+param set CA_R_REV 15
+
+# ==================== DShot 3D 中位死区（ESC 侧）2026-10-22 ====================
+#
+# 🔴 为什么必须设：DSHOT_3D_DEAD_L/H 的默认值是 1000/1000 —— 一个【单点】死区。
+#    DShot.cpp:762 的逻辑：
+#        if (reversible && output >= _3d_dead_l && output <= _3d_dead_h)
+#                return DSHOT_DISARM_VALUE;        // 直接发 MOTOR_STOP
+#    ⇒ 只有当 mixer 输出【精确等于】1000 时电机才停。
+#    实测：摇杆回中时 manual_control_setpoint.throttle 是 +0.12 而不是 0，
+#    经 ground_drive 换算成 control≈0.096 → mixer 输出 ≈1096 → 落在死区外
+#    → 电机以 ~2200 rpm 空转（轮子挂在 64:1 减速器后面，电机必须转得很快，
+#      而同轴的桨也会跟着高速转，声音很大、很吓人）。
+#
+# 量纲：以 mixer_module 的 0..1999 表示（1000 = 中位），不是 DShot 值。
+#
+# 🔴🔴 死区必须【远小于】转向指令，否则会把原地转向整个吃掉（2026-10-22 实测踩到）：
+#    原地转向不靠 v_cmd（GD_TURN_SLOW=1.0 时满舵把前进量精确归零），只靠差速：
+#        w_cmd   = GD_YAW_GAIN(1.5) * roll(1.0) = 1.5 rad/s
+#        Δv      = w_cmd * W/2 = 1.5 * 0.0825 = 0.124 m/s
+#        control = Δv * 64 / (0.04 * 2400) = ±0.0825
+#        mixer   = 917.5 / 1082.5
+#    曾把死区设成 900..1100（±0.10）—— **比打满舵的 ±0.0825 还大**
+#    ⇒ 两个轮子全部强制 MOTOR_STOP，症状是「左右打到底完全没反应，只有前后能动」。
+#
+#    分工原则（不能搞反）：
+#      摇杆层 GD_STICK_DZ   负责「回中即停」（处理摇杆偏置，实测达 +0.12）
+#      ESC 层 DSHOT_3D_DEAD 只负责「真正归零」的兜底，量级 ±0.015 即可
+param set DSHOT_3D_ENABLE  1
+param set DSHOT_MIN        0
+param set DSHOT_3D_DEAD_L  985
+param set DSHOT_3D_DEAD_H  1015
+
+# 摇杆死区：0.15 能把实测的 thr=+0.12 偏置完全压成 0
+# （0.10 时残余 control=0.0148 紧贴 ESC 死区边缘，余量不够）
+param set GD_STICK_DZ      0.15
+
+# ==================== 摆臂舵机（输出 9 / 10）====================
+# 功能号 301 = Peripheral_via_Actuator_Set 1（output_functions.yaml: 301..306）
+#   → 由 MAV_CMD_DO_SET_ACTUATOR(187) 驱动，也可被 MAV_CMD_ACTUATOR_TEST(310, p5=1301) 驱动
+# 两个舵机分配【同一功能号】，PX4 会把同一个值送到两路输出 → 物理级同步，不可能失步。
+param set PWM_MAIN_FUNC9  301
+param set PWM_MAIN_FUNC10 301
+
+# 舵机用传统 PWM，50 Hz
+param set PWM_MAIN_TIM3 50
+
+# 行程标定：MIN = 摆臂 0°，MAX = 摆臂 52°（对应 URDF 的 0 ~ 0.9076 rad）
+# ⚠️⚠️ 下面 1000/2000 是【占位值】，不是标定值！⚠️⚠️
+#   阶段 5 必须用舵机测试仪实测后改成真实 µs，否则可能顶到机械限位烧舵机。
+param set PWM_MAIN_MIN9 1000
+param set PWM_MAIN_MAX9 2000
+
+# 镜像侧（右摆臂）：对调 MIN/MAX 实现反向，比 PWM_MAIN_REV10 更可控
+#   （REV 是在软件里反算，对舵机这种非对称行程不安全）
+param set PWM_MAIN_MIN10 2000
+param set PWM_MAIN_MAX10 1000
+
+# 未解锁 / 失效保护时停在 MIN 侧 = 摆臂 0°
+param set PWM_MAIN_DIS9  1000
+param set PWM_MAIN_DIS10 1000
+param set PWM_MAIN_FAIL9  1000
+param set PWM_MAIN_FAIL10 1000
+#
+# ⚠️⚠️⚠️ 已知待决策问题（阶段 5 必须解决）⚠️⚠️⚠️
+#   ground_drive 的安全门要求「摆臂 ≥48° 才允许解锁」，而未解锁时舵机固定在 DIS=0°,
+#   于是实机存在自举死锁：
+#       摆臂 0°（DIS）→ ground_drive 拒绝解锁 → 187 在未解锁时不生效 → 摆臂永远到不了 48°
+#   仿真里是靠 COM_PREARM_MODE 2（prearmed）绕过的，但**带桨的实机不能开 prearmed**
+#   （prearmed = 全部输出通道带电）。
+#   两个候选方案，等阶段 5 标定完、确认"0°/52° 各自对应哪个物理姿态"后再定：
+#     A) 若 52° 才是地面位：把 DIS 改成 MIN 对面的值（如 PWM_MAIN_DIS9 2000），
+#        未解锁就停在地面位；飞行前再显式命令回 0°。
+#     B) 若 0° 才是地面位：直接降低 ground_drive 的解锁角度门限（改源码 GD_* 参数）。
+#   在此之前：**不要刷机试飞行** —— 这台机器人现在会拒绝在地面模式解锁（安全，但不可用）。
+
+# ==================== 遥控链路 ====================
+# COM_RC_IN_MODE=5 = RC 优先 + MAVLink 兜底，两条手动控制通路都支持
+param set COM_RC_IN_MODE 5
+
+# rc_update.cpp:154 的 _rc_calibrated 要求：
+#     RC_CHAN_CNT > 0 且 RC_MAP_{ROLL|PITCH|THROTTLE|YAW} 至少一个 > 0
+# 不满足时 manual_control_input.valid 恒 false，RC 通路等于不存在。
+# ⚠️ PX4 v1.18 的 RC_MAP_* 默认全是 0（不是常见的 1/2/3/4）。
+# AETR：CH1=副翼(roll) CH2=升降(pitch) CH3=油门 CH4=方向(yaw)
+param set RC_CHAN_CNT 8
+param set RC_MAP_ROLL 1
+param set RC_MAP_PITCH 2
+param set RC_MAP_THROTTLE 3
+param set RC_MAP_YAW 4
+
+# 遥控丢失豁免：bit3 = External Mode。
+# 地面模式下 PX4 会用 NAV_RCL_ACT 处理"摇杆丢了"，导致地上的机器人去 RTL 起飞；
+# 而 ground_drive 自己已处理失联（manualDrive() 里 mcs.valid=false → 输出 0）。
+# 豁免后仅影响外部模式；飞行模式（Position 等）仍保留 Return 保护。
+param set COM_RCL_EXCEPT 8
+
+# 解锁后不起飞自动上锁：关闭（地面模式需要长期 armed，开一段停一段）
+param set COM_DISARM_PRFLT 0
+# 着陆后自动上锁：关闭（地面模式轮子打滑会被 land detector 误判起飞→落地→上锁）
+param set COM_DISARM_LAND 0
+#
+# ⚠️ 与仿真不同：这里【不设】NAV_DLL_ACT。
+#    仿真是纯本地回环、没有真实数传；实机有数传链路，
+#    数据链丢失时应当保留 PX4 默认的保护动作，不要照抄仿真关掉。
+
+# ==================== 悬停油门（调参类，保留 set-default）====================
+# 默认 0.5，实际悬停油门 = 1/sqrt(TWR)。TWR=3 时 = 0.5774。
+# ⚠️ 实机重量与仿真不同，装好整机后必须重新称重、重算 TWR 再改这里。
+param set-default MPC_THR_HOVER 0.5774
+
+# ==================== 地面驱动标定 ====================
+# GD_MAX_OMEGA = 电机侧最大角速度，ground_drive 用它做归一化。
+# ⚠️ 仿真里 2400 是配 model.sdf 的 AirGroundMux；实机必须按真实电机 KV
+#    和 64:1 减速比重算，否则「指令速度 ≠ 实际速度」。
+#    轮顶速 = GD_MAX_OMEGA / 64 × 轮半径(0.04 m)
+param set GD_MAX_OMEGA 2400
+# 目标最大行驶速度（m/s）
+param set GD_MAX_SPEED 1.2
+# 满舵时纵向速度精确归零（纯原地搓转）
+param set GD_TURN_SLOW 1.0
+
+# ==================== 地面驱动模块 ====================
+# GROUND_DRIVE 外部模式：`commander mode ext1` 进入，独占 actuator_motors。
+# ⚠️ 若模块没编译进去（CONFIG_MODULES_GROUND_DRIVE=n），这里只会打印 unknown command。
+ground_drive start

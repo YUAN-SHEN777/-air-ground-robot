@@ -1,0 +1,550 @@
+<?xml version="1.0"?>
+<robot name="robot">
+  <link name="base">
+    <inertial>
+      <origin xyz="-0.04666826 0.00001225 0.02272175" rpy="0 0 0"/>
+      <mass value="0.12128087"/>
+      <inertia ixx="0.00006449" ixy="0" ixz="-0.00003421" iyy="0.00033419" iyz="1e-8" izz="0.00030231"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><mesh filename="meshes/base_collision.stl"/></geometry>
+      <material name="base_color"><color rgba="0.79215686 0.81960784 0.93333333 1"/></material>
+    </visual>
+    <!-- [物理仿真] 机身：原 collision 为 mesh（dartsim 不支持），改用长方体近似 -->
+    <collision>
+      <origin xyz="-0.0557 0 0.0422" rpy="0 0 0"/>
+      <geometry><box size="0.1611 0.0695 0.0844"/></geometry>
+    </collision>
+  </link>
+
+  <link name="link1">
+    <inertial>
+      <origin xyz="-6.6e-7 -0.0000014 0.00414836" rpy="0 0 0"/>
+      <mass value="0.00345126"/>
+      <inertia ixx="0.00000256" ixy="0" ixz="0" iyy="0.00000255" iyz="0" izz="0.0000051"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><mesh filename="meshes/link1_collision.stl"/></geometry>
+      <material name="link1_color"><color rgba="0.30980392 0.30980392 0.30980392 1"/></material>
+    </visual>
+    <!-- [物理仿真] 螺旋桨 link1：改用薄圆盘近似（半径 0.065，厚 0.007） -->
+    <collision>
+      <origin xyz="0.0128 -0.0051 0.0035" rpy="0 0 0"/>
+      <geometry><cylinder radius="0.065" length="0.007"/></geometry>
+    </collision>
+  </link>
+
+  <link name="link2">
+    <inertial>
+      <origin xyz="-9e-7 0.00000121 0.00414837" rpy="0 0 0"/>
+      <mass value="0.00345128"/>
+      <inertia ixx="0.00000256" ixy="0" ixz="0" iyy="0.00000255" iyz="0" izz="0.0000051"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><mesh filename="meshes/link2_collision.stl"/></geometry>
+      <material name="link2_color"><color rgba="0.30980392 0.30980392 0.30980392 1"/></material>
+    </visual>
+    <!-- [物理仿真] 螺旋桨 link2：改用薄圆盘近似 -->
+    <collision>
+      <origin xyz="0.0174 -0.0003 0.0035" rpy="0 0 0"/>
+      <geometry><cylinder radius="0.065" length="0.007"/></geometry>
+    </collision>
+  </link>
+
+  <link name="link3">
+    <inertial>
+      <origin xyz="1e-7 0.0000015 0.00414837" rpy="0 0 0"/>
+      <mass value="0.00345128"/>
+      <inertia ixx="0.00000256" ixy="0" ixz="0" iyy="0.00000255" iyz="0" izz="0.0000051"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><mesh filename="meshes/link3_collision.stl"/></geometry>
+      <material name="link3_color"><color rgba="0.30980392 0.30980392 0.30980392 1"/></material>
+    </visual>
+    <!-- [物理仿真] 螺旋桨 link3：改用薄圆盘近似 -->
+    <collision>
+      <origin xyz="-0.0062 0.0118 0.0035" rpy="0 0 0"/>
+      <geometry><cylinder radius="0.065" length="0.007"/></geometry>
+    </collision>
+  </link>
+
+  <link name="link4">
+    <inertial>
+      <origin xyz="4.5e-7 -0.00000148 0.00414836" rpy="0 0 0"/>
+      <mass value="0.00345126"/>
+      <inertia ixx="0.00000256" ixy="0" ixz="0" iyy="0.00000255" iyz="0" izz="0.0000051"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><mesh filename="meshes/link4_collision.stl"/></geometry>
+      <material name="link4_color"><color rgba="0.30980392 0.30980392 0.30980392 1"/></material>
+    </visual>
+    <!-- [物理仿真] 螺旋桨 link4：改用薄圆盘近似 -->
+    <collision>
+      <origin xyz="-0.0122 -0.0060 0.0035" rpy="0 0 0"/>
+      <geometry><cylinder radius="0.065" length="0.007"/></geometry>
+    </collision>
+  </link>
+
+  <link name="link5">
+    <inertial>
+      <origin xyz="-6.3e-7 9.4e-7 -0.01290743" rpy="0 0 0"/>
+      <mass value="0.05268079"/>
+      <inertia ixx="0.00001082" ixy="0" ixz="0" iyy="0.00001082" iyz="0" izz="0.00001792"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><mesh filename="meshes/link5_collision.stl"/></geometry>
+      <material name="link5_color"><color rgba="0.7 0.7 0.75 1"/></material>
+    </visual>
+    <!-- [物理仿真] 轮子 link5：改用圆柱近似（半径 0.040，厚 0.034，轴沿 Z 与关节轴一致） -->
+    <collision>
+      <origin xyz="0 0 -0.007" rpy="0 0 0"/>
+      <geometry><cylinder radius="0.040" length="0.034"/></geometry>
+    </collision>
+  </link>
+
+  <link name="link6">
+    <inertial>
+      <origin xyz="6.3e-7 -9.4e-7 -0.01290743" rpy="0 0 0"/>
+      <mass value="0.05268079"/>
+      <inertia ixx="0.00001082" ixy="0" ixz="0" iyy="0.00001082" iyz="0" izz="0.00001792"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><mesh filename="meshes/link6_collision.stl"/></geometry>
+      <material name="link6_color"><color rgba="0.7 0.7 0.75 1"/></material>
+    </visual>
+    <!-- [物理仿真] 轮子 link6：改用圆柱近似 -->
+    <collision>
+      <origin xyz="0 0 -0.007" rpy="0 0 0"/>
+      <geometry><cylinder radius="0.040" length="0.034"/></geometry>
+    </collision>
+  </link>
+
+  <link name="link7">
+    <inertial>
+      <origin xyz="-6.3e-7 9.4e-7 -0.01290743" rpy="0 0 0"/>
+      <mass value="0.05268079"/>
+      <inertia ixx="0.00001082" ixy="0" ixz="0" iyy="0.00001082" iyz="0" izz="0.00001792"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><mesh filename="meshes/link7_collision.stl"/></geometry>
+      <material name="link7_color"><color rgba="0.7 0.7 0.75 1"/></material>
+    </visual>
+    <!-- [物理仿真] 轮子 link7：改用圆柱近似 -->
+    <collision>
+      <origin xyz="0 0 -0.007" rpy="0 0 0"/>
+      <geometry><cylinder radius="0.040" length="0.034"/></geometry>
+    </collision>
+  </link>
+
+  <link name="link8">
+    <inertial>
+      <origin xyz="6.3e-7 -9.4e-7 -0.01290743" rpy="0 0 0"/>
+      <mass value="0.05268079"/>
+      <inertia ixx="0.00001082" ixy="0" ixz="0" iyy="0.00001082" iyz="0" izz="0.00001792"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><mesh filename="meshes/link8_collision.stl"/></geometry>
+      <material name="link8_color"><color rgba="0.7 0.7 0.75 1"/></material>
+    </visual>
+    <!-- [物理仿真] 轮子 link8：改用圆柱近似 -->
+    <collision>
+      <origin xyz="0 0 -0.007" rpy="0 0 0"/>
+      <geometry><cylinder radius="0.040" length="0.034"/></geometry>
+    </collision>
+  </link>
+
+  <link name="link9">
+    <inertial>
+      <origin xyz="-0.05879046 -0.06070239 0.00174875" rpy="0 0 0"/>
+      <mass value="0.16704595"/>
+      <inertia ixx="0.00016241" ixy="-0.00002946" ixz="-6.2e-7" iyy="0.00097681" iyz="0.00000797" izz="0.0010756"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><mesh filename="meshes/link9_collision.stl"/></geometry>
+      <material name="link9_color"><color rgba="0.79215686 0.81960784 0.93333333 1"/></material>
+    </visual>
+    <!-- [物理仿真] 摆臂 link9：改用长方体近似 -->
+    <collision>
+      <origin xyz="-0.0685 -0.0433 0.0113" rpy="0 0 0"/>
+      <geometry><box size="0.2634 0.1215 0.0707"/></geometry>
+    </collision>
+  </link>
+
+  <link name="link10">
+    <inertial>
+      <origin xyz="-0.0723525 0.06061795 0.00171307" rpy="0 0 0"/>
+      <mass value="0.16700574"/>
+      <inertia ixx="0.00016366" ixy="0.0000282" ixz="0.00000304" iyy="0.00098992" iyz="-0.00000809" izz="0.00108998"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><mesh filename="meshes/link10_collision.stl"/></geometry>
+      <material name="link10_color"><color rgba="0.79215686 0.81960784 0.93333333 1"/></material>
+    </visual>
+    <!-- [物理仿真] 摆臂 link10：改用长方体近似 -->
+    <collision>
+      <origin xyz="-0.0685 0.0434 0.0112" rpy="0 0 0"/>
+      <geometry><box size="0.2634 0.1210 0.0705"/></geometry>
+    </collision>
+  </link>
+
+  <!-- ===== 摆臂舵机 joint1 / joint2 =====
+       限位 0 ~ 52° (0.9076 rad)：52° 是机构最大角度。
+       其中 48° 为模式分界（软件层判定），48° 以上必须已触地。 -->
+  <joint name="joint1" type="revolute">
+    <parent link="base"/>
+    <child link="link9"/>
+    <origin xyz="0.0065 -0.0275 0.021" rpy="0 0 0"/>
+    <axis xyz="1 0 0"/>
+    <limit lower="0" upper="0.9076" effort="0.7" velocity="13"/>
+    <!-- 关节阻尼：从物理层面吸收振动，比只靠 PID 稳得多 -->
+    <dynamics damping="0.2" friction="0.0"/>
+  </joint>
+  <joint name="joint2" type="revolute">
+    <parent link="base"/>
+    <child link="link10"/>
+    <origin xyz="0.0065 0.0275 0.021" rpy="0 0 0"/>
+    <axis xyz="-1 0 0"/>
+    <limit lower="0" upper="0.9076" effort="0.7" velocity="13"/>
+    <dynamics damping="0.2" friction="0.0"/>
+  </joint>
+  <!-- ===== 螺旋桨关节 joint3~joint6 =====
+       ⚠️ 原 URDF 的 continuous 关节没有 effort/velocity，SDF 会默认成 0，
+          导致"有指令但使不上劲"，所以必须显式补上 <limit>。
+       ⚠️ 3400 rad/s 只是"上限配额"。1ms 步长下每步会转 195°，数值必然发散，
+          实际指令请勿直接给到 3400（详见项目笔记 / 推力模型方案）。 -->
+  <joint name="joint3" type="continuous">
+    <parent link="link9"/>
+    <child link="link1"/>
+    <origin xyz="0.0365 -0.0825 0.03379" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit effort="0.25" velocity="3400"/>
+  </joint>
+  <joint name="joint4" type="continuous">
+    <parent link="link10"/>
+    <child link="link2"/>
+    <origin xyz="0.0365 0.0825 0.03379" rpy="0 0 0"/>
+    <axis xyz="0 0 -1"/>
+    <limit effort="0.25" velocity="3400"/>
+  </joint>
+  <joint name="joint5" type="continuous">
+    <parent link="link9"/>
+    <child link="link3"/>
+    <origin xyz="-0.1735 -0.0825 0.03379" rpy="0 0 0"/>
+    <axis xyz="0 0 -1"/>
+    <limit effort="0.25" velocity="3400"/>
+  </joint>
+  <joint name="joint6" type="continuous">
+    <parent link="link10"/>
+    <child link="link4"/>
+    <origin xyz="-0.1735 0.0825 0.03379" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit effort="0.25" velocity="3400"/>
+  </joint>
+  <!-- ===== 轮子关节 joint7~joint10 =====
+       50 rad/s 在 1ms 步长下每步 2.9°，数值稳定 ✅ -->
+  <joint name="joint7" type="continuous">
+    <parent link="link9"/>
+    <child link="link5"/>
+    <origin xyz="0.0365 -0.0825 -0.018" rpy="0 0 0"/>
+    <axis xyz="0 0 -1"/>
+    <limit effort="15" velocity="50"/>
+  </joint>
+  <joint name="joint8" type="continuous">
+    <parent link="link10"/>
+    <child link="link6"/>
+    <origin xyz="0.0365 0.0825 -0.018" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit effort="15" velocity="50"/>
+  </joint>
+  <joint name="joint9" type="continuous">
+    <parent link="link9"/>
+    <child link="link7"/>
+    <origin xyz="-0.1735 -0.0825 -0.018" rpy="0 0 0"/>
+    <axis xyz="0 0 -1"/>
+    <limit effort="15" velocity="50"/>
+  </joint>
+  <joint name="joint10" type="continuous">
+    <parent link="link10"/>
+    <child link="link8"/>
+    <origin xyz="-0.1735 0.0825 -0.018" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit effort="15" velocity="50"/>
+  </joint>
+  <link name="ref_ref1"/>
+  <joint name="ref_ref1_frame" type="fixed">
+    <parent link="base"/>
+    <child link="ref_ref1"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <!-- ==================== Gazebo 物理属性（仅仿真使用，不影响其他软件） ==================== -->
+  <!-- 轮子 link5~link8：摩擦
+       ⚠️ 实测：μ=1.2 时轮盘"平面贴地"会产生巨大剥离阻力（约 0.33 N·m/舵机），
+          导致 0.7 N·m 的舵机无法把摆臂转起来（只能到 1.6°）。
+          降到 0.4 后阻力降到约 0.11 N·m/舵机，0.7 N·m 舵机即可驱动。
+          代价：地面行驶抓地力下降（起步可能打滑）。 -->
+  <gazebo reference="link5">
+    <mu1>0.4</mu1><mu2>0.4</mu2>
+  </gazebo>
+  <gazebo reference="link6">
+    <mu1>0.4</mu1><mu2>0.4</mu2>
+  </gazebo>
+  <gazebo reference="link7">
+    <mu1>0.4</mu1><mu2>0.4</mu2>
+  </gazebo>
+  <gazebo reference="link8">
+    <mu1>0.4</mu1><mu2>0.4</mu2>
+  </gazebo>
+  <!-- 螺旋桨 link1~link4：摩擦小一些，避免桨叶碰到地面时被"粘住" -->
+  <gazebo reference="link1">
+    <mu1>0.3</mu1><mu2>0.3</mu2>
+  </gazebo>
+  <gazebo reference="link2">
+    <mu1>0.3</mu1><mu2>0.3</mu2>
+  </gazebo>
+  <gazebo reference="link3">
+    <mu1>0.3</mu1><mu2>0.3</mu2>
+  </gazebo>
+  <gazebo reference="link4">
+    <mu1>0.3</mu1><mu2>0.3</mu2>
+  </gazebo>
+  <!-- 机身与摆臂：关闭自碰撞（简化后的碰撞体会互相重叠，开启会互相"打架"） -->
+  <gazebo reference="base"><self_collide>false</self_collide></gazebo>
+  <gazebo reference="link9"><self_collide>false</self_collide></gazebo>
+  <gazebo reference="link10"><self_collide>false</self_collide></gazebo>
+
+  <!-- ==================================================================
+       仿真控制器插件（只有 Gazebo 会用，不影响其他软件）
+       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+       设计要点：把「必须同步」的关节挂到【同一个话题】上，
+                 由仿真器层面强制同步，而不是靠上层程序自觉。
+       ================================================================== -->
+
+  <!-- ① 关节状态发布：脚本据此读取两臂角度 -->
+  <gazebo>
+    <plugin filename="gz-sim-joint-state-publisher-system"
+            name="gz::sim::systems::JointStatePublisher">
+      <topic>/joint_state</topic>
+      <update_rate>1000</update_rate>
+    </plugin>
+  </gazebo>
+
+  <!-- ② 摆臂舵机位置控制
+          joint1 与 joint2 订阅【同一个话题 /cmd/arm_angle】
+          → 物理上不可能转出不同角度，强制同步 ✅
+          参数说明：p_gain/i_gain/d_gain 是 PID 增益，cmd_max/cmd_min 是输出限幅 -->
+  <gazebo>
+    <plugin filename="gz-sim-joint-position-controller-system"
+            name="gz::sim::systems::JointPositionController">
+      <joint_name>joint1</joint_name>
+      <topic>/cmd/arm_angle</topic>
+      <p_gain>5</p_gain>
+      <i_gain>3</i_gain>
+      <d_gain>0.2</d_gain>
+      <i_max>0.3</i_max>
+      <i_min>-0.3</i_min>
+      <cmd_max>3.0</cmd_max>
+      <cmd_min>-3.0</cmd_min>
+      <initial_position>0</initial_position>
+    </plugin>
+  </gazebo>
+  <gazebo>
+    <plugin filename="gz-sim-joint-position-controller-system"
+            name="gz::sim::systems::JointPositionController">
+      <joint_name>joint2</joint_name>
+      <topic>/cmd/arm_angle</topic>
+      <p_gain>5</p_gain>
+      <i_gain>3</i_gain>
+      <d_gain>0.2</d_gain>
+      <i_max>0.3</i_max>
+      <i_min>-0.3</i_min>
+      <cmd_max>3.0</cmd_max>
+      <cmd_min>-3.0</cmd_min>
+      <initial_position>0</initial_position>
+    </plugin>
+  </gazebo>
+
+  <!-- ③ 轮子速度控制
+          4 个轮子订阅【同一个话题 /cmd/wheel_speed】
+          → 一条指令驱动全部，天然同步 ✅
+          ⚠️ 注意：JointController 的指令话题参数名是 sub_topic（不是 topic），
+             两个都写上以防版本差异。 -->
+  <gazebo>
+    <plugin filename="gz-sim-joint-controller-system"
+            name="gz::sim::systems::JointController">
+      <joint_name>joint7</joint_name>
+      <sub_topic>/cmd/wheel_speed</sub_topic>
+      <topic>/cmd/wheel_speed</topic>
+      <initial_velocity>0</initial_velocity>
+      <use_force_commands>false</use_force_commands>
+    </plugin>
+  </gazebo>
+  <gazebo>
+    <plugin filename="gz-sim-joint-controller-system"
+            name="gz::sim::systems::JointController">
+      <joint_name>joint8</joint_name>
+      <sub_topic>/cmd/wheel_speed</sub_topic>
+      <topic>/cmd/wheel_speed</topic>
+      <initial_velocity>0</initial_velocity>
+      <use_force_commands>false</use_force_commands>
+    </plugin>
+  </gazebo>
+  <gazebo>
+    <plugin filename="gz-sim-joint-controller-system"
+            name="gz::sim::systems::JointController">
+      <joint_name>joint9</joint_name>
+      <sub_topic>/cmd/wheel_speed</sub_topic>
+      <topic>/cmd/wheel_speed</topic>
+      <initial_velocity>0</initial_velocity>
+      <use_force_commands>false</use_force_commands>
+    </plugin>
+  </gazebo>
+  <gazebo>
+    <plugin filename="gz-sim-joint-controller-system"
+            name="gz::sim::systems::JointController">
+      <joint_name>joint10</joint_name>
+      <sub_topic>/cmd/wheel_speed</sub_topic>
+      <topic>/cmd/wheel_speed</topic>
+      <initial_velocity>0</initial_velocity>
+      <use_force_commands>false</use_force_commands>
+    </plugin>
+  </gazebo>
+
+  <!-- ==================================================================
+       ④ 螺旋桨推力模型（4 个实例，一个桨一份）
+       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+       为什么要它：光是"让桨转"不会产生升力。这个插件按
+             推力 T = motorConstant * w^2   （沿桨盘 +Z，即向上）
+             反扭 M = momentConstant * w^2  （绕桨轴，产生偏航）
+       把转速换算成真实的力和力矩，机器人才能飞。
+
+       参数推导（2026-09 定案）：
+         · 整机 679.86 g -> 重力 W = 6.67 N
+         · 目标推重比 TWR = 3  ->  单桨最大推力 = 3 * 6.67 / 4 = 5.0 N
+         · motorConstant  = 5.0 / 3400^2 = 4.325e-7
+         · momentConstant = 0.25 / 3400^2 = 2.163e-8 （沿用你给的 0.25 N.m）
+         · 悬停油门 ≈ 1/sqrt(3) ≈ 58%
+
+       指令：话题 /cmd/motor_speed，类型 gz.msgs.Actuators
+             一个 velocity 数组 [w0, w1, w2, w3]，单位 rad/s
+             每个实例靠 actuator_number 取自己那一项
+             （实测插件只订阅 Actuators，不接受 Double）
+
+       转向分配（2026-09 实测定案）：
+             ⚠ 四个都写 ccw —— 这不是笔误！
+
+             joint3~6 的关节轴是  +Z / -Z / -Z / +Z，本身已经是镜像的，
+             所以 turningDirection 必须四桨【同值】，才能在【世界坐标】下
+             得到「对角同向、相邻反向」的标准四轴 X 型。
+
+             曾经按直觉写成 ccw/cw/cw/ccw（以为要"配对"），
+             结果世界坐标下四桨全部同向旋转、反扭力矩叠加：
+                 平均偏航角速度 -23.6°/s，偏航摆幅 3.95°  → 会越飞越打转
+             改成四桨同值后：
+                 平均偏航角速度 -0.034°/s，偏航摆幅 0.005°
+             改善约 700 倍（对照实验见 rot_check.py）
+       ================================================================== -->
+
+  <!-- 桨 1：前左（joint3 -> link1），轴 +Z -->
+  <gazebo>
+    <plugin filename="gz-sim-multicopter-motor-model-system"
+            name="gz::sim::systems::MulticopterMotorModel">
+      <jointName>joint3</jointName>
+      <linkName>link1</linkName>
+      <turningDirection>ccw</turningDirection>
+      <timeConstantUp>0.0125</timeConstantUp>
+      <timeConstantDown>0.025</timeConstantDown>
+      <maxRotVelocity>3400</maxRotVelocity>
+      <motorConstant>4.325e-7</motorConstant>
+      <momentConstant>2.163e-8</momentConstant>
+      <commandSubTopic>/cmd/motor_speed</commandSubTopic>
+      <robotNamespace>/</robotNamespace>
+      <motorNumber>0</motorNumber>
+      <actuator_number>0</actuator_number>
+      <rotorDragCoefficient>0</rotorDragCoefficient>
+      <rollingMomentCoefficient>0</rollingMomentCoefficient>
+      <rotorVelocitySlowdownSim>10</rotorVelocitySlowdownSim>
+      <motorType>velocity</motorType>
+    </plugin>
+  </gazebo>
+
+  <!-- 桨 2：前右（joint4 -> link2），轴 -Z -->
+  <gazebo>
+    <plugin filename="gz-sim-multicopter-motor-model-system"
+            name="gz::sim::systems::MulticopterMotorModel">
+      <jointName>joint4</jointName>
+      <linkName>link2</linkName>
+      <turningDirection>ccw</turningDirection>
+      <timeConstantUp>0.0125</timeConstantUp>
+      <timeConstantDown>0.025</timeConstantDown>
+      <maxRotVelocity>3400</maxRotVelocity>
+      <motorConstant>4.325e-7</motorConstant>
+      <momentConstant>2.163e-8</momentConstant>
+      <commandSubTopic>/cmd/motor_speed</commandSubTopic>
+      <robotNamespace>/</robotNamespace>
+      <motorNumber>1</motorNumber>
+      <actuator_number>1</actuator_number>
+      <rotorDragCoefficient>0</rotorDragCoefficient>
+      <rollingMomentCoefficient>0</rollingMomentCoefficient>
+      <rotorVelocitySlowdownSim>10</rotorVelocitySlowdownSim>
+      <motorType>velocity</motorType>
+    </plugin>
+  </gazebo>
+
+  <!-- 桨 3：后左（joint5 -> link3），轴 -Z -->
+  <gazebo>
+    <plugin filename="gz-sim-multicopter-motor-model-system"
+            name="gz::sim::systems::MulticopterMotorModel">
+      <jointName>joint5</jointName>
+      <linkName>link3</linkName>
+      <turningDirection>ccw</turningDirection>
+      <timeConstantUp>0.0125</timeConstantUp>
+      <timeConstantDown>0.025</timeConstantDown>
+      <maxRotVelocity>3400</maxRotVelocity>
+      <motorConstant>4.325e-7</motorConstant>
+      <momentConstant>2.163e-8</momentConstant>
+      <commandSubTopic>/cmd/motor_speed</commandSubTopic>
+      <robotNamespace>/</robotNamespace>
+      <motorNumber>2</motorNumber>
+      <actuator_number>2</actuator_number>
+      <rotorDragCoefficient>0</rotorDragCoefficient>
+      <rollingMomentCoefficient>0</rollingMomentCoefficient>
+      <rotorVelocitySlowdownSim>10</rotorVelocitySlowdownSim>
+      <motorType>velocity</motorType>
+    </plugin>
+  </gazebo>
+
+  <!-- 桨 4：后右（joint6 -> link4），轴 +Z -->
+  <gazebo>
+    <plugin filename="gz-sim-multicopter-motor-model-system"
+            name="gz::sim::systems::MulticopterMotorModel">
+      <jointName>joint6</jointName>
+      <linkName>link4</linkName>
+      <turningDirection>ccw</turningDirection>
+      <timeConstantUp>0.0125</timeConstantUp>
+      <timeConstantDown>0.025</timeConstantDown>
+      <maxRotVelocity>3400</maxRotVelocity>
+      <motorConstant>4.325e-7</motorConstant>
+      <momentConstant>2.163e-8</momentConstant>
+      <commandSubTopic>/cmd/motor_speed</commandSubTopic>
+      <robotNamespace>/</robotNamespace>
+      <motorNumber>3</motorNumber>
+      <actuator_number>3</actuator_number>
+      <rotorDragCoefficient>0</rotorDragCoefficient>
+      <rollingMomentCoefficient>0</rollingMomentCoefficient>
+      <rotorVelocitySlowdownSim>10</rotorVelocitySlowdownSim>
+      <motorType>velocity</motorType>
+    </plugin>
+  </gazebo>
+</robot>

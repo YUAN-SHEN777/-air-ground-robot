@@ -1,0 +1,110 @@
+<?xml version="1.0" ?>
+<!--
+  ====================================================================
+   air-ground 机器人 物理仿真世界
+   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   用法（必须在本文件所在目录执行）：
+       gz sim -v 4 robot_world.sdf        # 启动后处于暂停，方便先观察
+       gz sim -v 4 -r robot_world.sdf     # 启动后立即开始仿真
+
+   说明：
+     · 地面为无限大平面，机器人不会掉出去
+     · 机器人通过 <include> 直接引用同目录下的 robot.urdf
+     · 若改动了 robot.urdf，本文件无需修改，重新启动即可生效
+  ====================================================================
+-->
+<sdf version="1.10">
+  <world name="default">
+
+    <!-- ========== 物理参数：1ms 步长，实时运行 ========== -->
+    <physics name="1ms" type="ignored">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+    </physics>
+
+    <!-- ========== 必需的系统插件（显式声明，不依赖默认配置） ========== -->
+    <plugin filename="gz-sim-physics-system"
+            name="gz::sim::systems::Physics"/>
+    <plugin filename="gz-sim-user-commands-system"
+            name="gz::sim::systems::UserCommands"/>
+    <plugin filename="gz-sim-scene-broadcaster-system"
+            name="gz::sim::systems::SceneBroadcaster"/>
+    <!-- 接触检测：本意是把碰撞信息发布到 /world/default/contact
+         ⚠️ 但这个插件在 gz 8.15 里【不发布话题】（实测订阅成功、9 秒 0 条消息），
+            所以 air_ground_ctrl.py 的落地判据已改用【机身高度 z】（见 ON_GROUND_Z）。
+            这里先留着插件（无害），将来若要用接触数据再排查。 -->
+    <plugin filename="gz-sim-contact-system"
+            name="gz::sim::systems::Contact"/>
+
+    <!-- ========== 阳光 ========== -->
+    <light type="directional" name="sun">
+      <cast_shadows>true</cast_shadows>
+      <pose>0 0 10 0 0 0</pose>
+      <diffuse>0.8 0.8 0.8 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <attenuation>
+        <range>1000</range>
+        <constant>0.9</constant>
+        <linear>0.01</linear>
+        <quadratic>0.001</quadratic>
+      </attenuation>
+      <direction>-0.5 0.1 -0.9</direction>
+    </light>
+
+    <!-- ========== 地面 ========== -->
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>100 100</size>
+            </plane>
+          </geometry>
+          <surface>
+            <!-- 地面摩擦：与轮子的 mu=0.4 配套（摩擦力是两表面的组合值，
+                 只降一边可能无效，所以两边一起降） -->
+            <friction>
+              <ode>
+                <mu>0.4</mu>
+                <mu2>0.4</mu2>
+              </ode>
+            </friction>
+            <contact>
+              <ode>
+                <max_vel>0.01</max_vel>
+                <min_depth>0.001</min_depth>
+              </ode>
+            </contact>
+          </surface>
+        </collision>
+        <visual name="visual">
+          <cast_shadows>false</cast_shadows>
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>100 100</size>
+            </plane>
+          </geometry>
+          <material>
+            <ambient>0.7 0.7 0.7 1</ambient>
+            <diffuse>0.7 0.7 0.7 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ========== 机器人（直接引入同目录的 URDF） ==========
+         高度给 0.05m：机器人最低点（轮子底）在自身坐标系 z=-0.021，
+         所以实际离地约 2.9cm，会轻轻落下并站稳。
+         【避免用 0】：与地面重叠会被物理引擎当成"深层穿透"而弹飞。 -->
+    <include>
+      <uri>file:///home/yuan/robot air-ground/robot_urdf (4)/robot.urdf</uri>
+      <name>robot</name>
+      <pose>0 0 0.05 0 0 0</pose>
+    </include>
+
+  </world>
+</sdf>

@@ -1,0 +1,43 @@
+# ─────────────────────────────────────────────────────────────
+#  陆空两栖机器人 · Git 忽略规则
+#  只收「源码 / 模型 / 文档 / 数据」，不收构建产物与编辑器缓存
+# ─────────────────────────────────────────────────────────────
+
+# ── 编辑器
+.vscode/
+.idea/
+*.swp
+*~
+
+# ── Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# ── 构建产物
+build/
+*.o
+*.so
+*.a
+*.dylib
+
+# ── 仿真/测试运行时产物
+robot_tune*.urdf
+robot_tune*_world.sdf
+robot_rot_test*.urdf
+robot_rot_test*_world.sdf
+*.sdf.bak
+
+# ── 固件产物
+*.px4
+*.elf
+*.hex
+*.apj
+*.bin
+
+# ── 临时文件
+*.log
+*.tmp
+.DS_Store
+Thumbs.db

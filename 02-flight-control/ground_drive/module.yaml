@@ -1,0 +1,206 @@
+module_name: ground_drive
+parameters:
+  - group: Ground Drive
+    definitions:
+      GD_SERVO_RATE:
+        description:
+          short: Assumed servo angular rate for arm angle extrapolation
+          long: |
+            The arm angle is estimated by time-based extrapolation (there is no
+            angle sensor). This is the assumed angular rate used by the
+            estimator. Set it conservatively (slower than reality) so that the
+            estimate lags the real arm and the gate stays conservative.
+        type: float
+        unit: deg/s
+        decimal: 1
+        min: 5
+        max: 200
+        increment: 1
+        default: 40
+
+      GD_STICK_DZ:
+        description:
+          short: Stick deadzone for the ground drive mode
+          long: |
+            Normalised deadzone applied to the pitch, throttle and roll sticks
+            before they are turned into speed / yaw-rate commands.
+
+            Real sticks and the QGC virtual joystick do not return exactly to
+            zero: a resting offset of +0.12 on the throttle axis was measured,
+            which already produces 0.144 m/s of creep and a high motor RPM
+            (the wheel is behind a 64:1 reducer, so the motor spins 64x faster
+            than the wheel).
+
+            Inside the deadzone the command is forced to exactly zero; outside
+            it the remaining range is rescaled to 0..1 so full deflection still
+            gives full authority.
+
+            0 = disabled.
+            Note this is applied in addition to DSHOT_3D_DEAD_L/H, which forms
+            the ESC-side deadband around the neutral DShot value.
+            Keep this the PRIMARY creep suppressor, and keep DSHOT_3D_DEAD_L/H
+            narrow (+-0.015). The pure-pivot command is only control = +-0.0825
+            (w_cmd = GD_YAW_GAIN * roll, dv = w_cmd * W/2, control = dv * gear /
+            (r * max_omega)); an ESC deadband wider than that silently kills all
+            steering while forward/backward keeps working.
+        type: float
+        unit: norm
+        decimal: 2
+        min: 0
+        max: 0.5
+        increment: 0.01
+        default: 0.15
+
+      GD_ARM_MIN_DEG:
+        description:
+          short: Minimum arm angle to enable wheel drive
+          long: |
+            The arm must be rotated to the wheel position before the ground
+            drive mode is allowed to arm (0 deg = propeller position,
+            52 deg = wheel position).
+        type: float
+        unit: deg
+        decimal: 1
+        min: 30
+        max: 55
+        increment: 0.5
+        default: 48
+
+      GD_SERVO_GATE:
+        description:
+          short: Enable the arm-angle gate
+          long: |
+            Master switch for both arm-angle gates:
+              - arming_check_reply.can_arm_and_run (mode entry / arming)
+              - manualDrive() output gate (motors forced to 0)
+
+            When enabled (default) the arm must reach GD_ARM_MIN_DEG before
+            the ground drive mode can be armed, entered, or drive the wheel
+            motors.
+
+            Set this to 0 ONLY for bench debugging while the arm servo is not
+            wired or not calibrated: GD_ARM_MIN_DEG is then ignored completely
+            and the wheel motors are driven even with the arm at 0 deg
+            (propeller position). ALWAYS remove the propellers and lift the
+            vehicle off the ground. Restore to 1 before any real operation.
+
+            Unlike lowering GD_ARM_MIN_DEG, this switch keeps the calibrated
+            threshold intact, so re-enabling restores the real safety limit.
+        type: enum
+        values:
+          0: Disabled (bench debug only)
+          1: Enabled
+        default: 1
+
+      GD_MAX_SPEED:
+        description:
+          short: Maximum ground speed at full throttle
+          long: |
+            Limited by GD_MAX_OMEGA / GD_GEAR_RATIO * GD_WHEEL_R once the
+            normalised command saturates at 1.0.
+        type: float
+        unit: m/s
+        decimal: 2
+        min: 0.1
+        max: 5.0
+        increment: 0.05
+        default: 1.2
+
+      GD_WHEEL_TRACK:
+        description:
+          short: Distance between left and right wheels
+          long: |
+            Distance between the two arm axes. Measured from robot.urdf:
+            joint3/joint5 are at y = -0.0825, joint4/joint6 at y = +0.0825,
+            so the default is 0.165 m.
+        type: float
+        unit: m
+        decimal: 3
+        min: 0.05
+        max: 2.0
+        increment: 0.005
+        default: 0.165
+
+      GD_YAW_GAIN:
+        description:
+          short: Steering stick to yaw rate gain
+          long: |
+            Steering follows the official rover convention: the roll stick
+            (right stick horizontal). Verify the QGC joystick mapping before use.
+        type: float
+        decimal: 1
+        min: 0.1
+        max: 5.0
+        increment: 0.1
+        default: 1.5
+
+      GD_MAX_OMEGA:
+        description:
+          short: Motor shaft angular velocity at full actuator output
+          long: |
+            Normalisation constant for wheel commands: control = v * gear /
+            (wheel_r * GD_MAX_OMEGA).
+
+            MUST match <wheel_max_omega> in the Gazebo AirGroundMux plugin,
+            otherwise commanded speed != actual speed. The value is higher than
+            the propeller's <motor_max_omega> on purpose: props and wheels share
+            the same motor channel, and the prop omega_max is locked by the
+            thrust calibration (T = kT*w^2), so the wheel side gets its own
+            scale. Wheel top speed = GD_MAX_OMEGA / gear * wheel_r.
+        type: float
+        unit: rad/s
+        decimal: 0
+        min: 10
+        max: 10000
+        increment: 1
+        default: 2400
+
+      GD_GEAR_RATIO:
+        description:
+          short: Gear ratio between motor and wheel
+          long: |
+            Planetary reducer on the ground side. Wheel angular velocity =
+            motor angular velocity / gear ratio.
+        type: float
+        decimal: 1
+        min: 1
+        max: 200
+        increment: 1
+        default: 64
+
+      GD_WHEEL_R:
+        description:
+          short: Wheel radius
+          long: |
+            Used to convert wheel linear speed to motor shaft angular velocity.
+            Measured from robot.urdf (collision cylinder radius = 0.040 m).
+        type: float
+        unit: m
+        decimal: 4
+        min: 0.005
+        max: 0.5
+        increment: 0.001
+        default: 0.04
+
+      GD_TURN_SLOW:
+        description:
+          short: Throttle cut at full steering
+          long: |
+            Skid-steer needs differential authority to turn. With W=0.165 m and
+            L=0.21 m (W/L = 0.79) this frame loses more yaw moment to lateral
+            scrub than the wheels can generate, so longitudinal speed is scaled
+            by (1 - GD_TURN_SLOW * |roll|).
+
+            1.0 = full steering zeroes the longitudinal command completely,
+                  i.e. pure pivot. Measured 2026-10-18 (3 s, |dyaw| > 10 deg):
+                    v = 0.60 m/s -> 0/5 turn
+                    v = 0.45 m/s -> 2/10
+                    v = 0.00 m/s -> 2/10 (best)
+            0.0 = disabled (keep full speed while steering).
+            Straight driving is unaffected (|roll| = 0 -> factor 1).
+        type: float
+        decimal: 2
+        min: 0.0
+        max: 1.0
+        increment: 0.05
+        default: 1.0
