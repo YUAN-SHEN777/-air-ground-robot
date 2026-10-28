@@ -4,21 +4,17 @@
 > 摆臂 0° 时桨朝上可飞行，摆臂 ~48° 时轮盘立起可地面行驶。
 > 本项目完成 **URDF 建模 → Gazebo 物理仿真 → PX4 飞控移植 → 实机验证** 的全链路实现。
 
-<p align="center">
-  <b>约 17,000 行代码与文档 · 35 项独立实验 · 213 个技术小节</b>
-</p>
-
 ---
 
 ## 目录
 
 | 目录 | 内容 |
 |:---|:---|
-| [`docs/`](docs/) | 6 份技术文档（5700+ 行） |
+| [`docs/`](docs/) | 6 份技术文档 |
 | [`01-simulation/`](01-simulation/) | 仿真世界：URDF / SDF / mesh / Gazebo 插件 |
 | [`02-flight-control/`](02-flight-control/) | 飞控命令代码：地面驱动模块 + airframe |
 | [`03-tools/`](03-tools/) | 调试与自动化脚本（23 个 Python + 5 个 Shell） |
-| [`04-experiments/`](04-experiments/) | **实验数据与日志**（35 项实验台账 + 实测数据表） |
+| [`04-experiments/`](04-experiments/) | **实验数据与日志**（实验台账 + 实测数据表） |
 | [`05-px4-modified/`](05-px4-modified/) | **修改后的 PX4 源码**（按原始路径组织 + patch） |
 | [`06-qgc-actions/`](06-qgc-actions/) | QGroundControl 自定义动作（9 档摆臂角） |
 
@@ -28,7 +24,7 @@
 
 ### 突破一 · 仿真平台的可信度体系
 
-不是「把模型跑起来」，而是建立 **四层保真度递进 + 每层可验证判据** 的数字孪生：
+本研究建立了 **四层保真度递进、每层可验证判据** 的仿真模型：
 
 | 层级 | 内容 | 验证判据（实测） |
 |:---|:---|:---|
@@ -38,12 +34,6 @@
 | **L4 传感器** | 补齐 `<imu>`/`<magnetometer>` 内部配置块 | STALE **4 → 0**；ARM `TEMP_REJECTED` → **`ACCEPTED`** |
 | **时间离散** | 4 ms → **1 ms** 步长 | 舵机力矩阈值 **0.80 → 0.48 N·m**；RTF = **0.996** |
 | **整体** | 悬停 27 s | 高度 **±0.04 m**、水平漂移 **< 7 cm**、姿态 **±0.3°**、偏航 **0.3°** |
-
-**三个反直觉结论**（均经实验证伪直觉）：
-
-1. **传感器接口是隐性契约** —— 名字对、话题对还不够，缺 `<imu>` 内部配置块会导致全链路 STALE、电机指令恒为 0。
-2. **坐标系手性差异会让单轴变正反馈** —— `CA_ROTORx_PY` 的 y 符号镜像导致起飞 0.2 s 内横滚炸到 **38°**、角速度 **481°/s**，而俯仰完全正常。
-3. **粗步长通过接触穿透放大物理阻力** —— 同一舵机 1 ms 需 0.48 N·m、4 ms 需 0.80 N·m，是接触刚度问题而非数值格式问题。
 
 ### 突破二 · 单通道双语义下的电机双向驱动
 
@@ -85,7 +75,7 @@ graph TB
 
     subgraph 飞控 PX4 v1.18
         CMD[MAVLink<br/>MANUAL_CONTROL 69]
-        GD[ground_drive<br/>外部模式 ext1 · 1301 行]
+        GD[ground_drive<br/>外部模式 ext1]
         MIX[mixer_module<br/>输出映射]
         DS[dshot 驱动<br/>3D 双向]
         CTL[control_allocator<br/>让位开关]
@@ -103,7 +93,7 @@ graph TB
     GD -->|MAV_CMD_DO_SET_ACTUATOR 187| S
 
     subgraph 仿真 Gazebo Harmonic
-        MUX[AirGroundMux<br/>自研 gz 插件 · 2033 行]
+        MUX[AirGroundMux<br/>自研 gz 插件]
         GZP[MulticopterMotorModel<br/>推力模型]
         JPC[JointPositionController<br/>舵机 PID]
     end
@@ -115,37 +105,7 @@ graph TB
 
 ---
 
-## 三、工作量统计
-
-### 代码与文档
-
-| 类别 | 项目 | 规模 |
-|:---|:---|:---|
-| **自研代码** | `ground_drive` 控制模块（cpp + hpp + yaml） | **1301 行** |
-| | `AirGroundMux` Gazebo 插件（cpp + hpp） | **2033 行** |
-| | 实机 airframe `4030_airground` | **218 行** |
-| | Gazebo 模型 / 世界（sdf + config） | **1031 行** |
-| **工具链** | Python 自动化脚本 **23 个** | **6622 行** |
-| **文档** | 技术文档 **6 份** | **5713 行 / 213 个三级小节** |
-| | **合计** | **≈ 17,000 行** |
-
-### 实验规模：35 项独立实验
-
-| 类别 | 项数 | 代表实验 |
-|:---|:---:|:---|
-| A · 仿真平台可信度 | 6 | 碰撞体代理、传感器契约 A/B、步长敏感性、零负载对照 |
-| B · 推力模型 | 5 | kT 定标、起飞加速度验证、**四桨转向方向对照（700× 改善）** |
-| C · 坐标系与布局 | 3 | **y 符号镜像**、磁力计链路对照、ENU→NED 镜像验证 |
-| D · 舵机执行器 | 9 | 力矩阈值扫描、**两个极限环**、阶跃 vs 斜坡 |
-| E · 地面驱动与双向 | 9 | **`CA_R_REV`×`KM` 三组对照**、值域陷阱、**转向成功率扫描** |
-| F · 人机接口 | 3 | 摇杆三路对照、四种控制方式对比 |
-
-👉 完整台账见 [`04-experiments/README.md`](04-experiments/README.md)，
-全部数值见 [`04-experiments/data/实验数据汇总.md`](04-experiments/data/实验数据汇总.md)。
-
----
-
-## 四、仓库结构
+## 三、仓库结构
 
 ```
 air-ground-robot/
@@ -155,16 +115,16 @@ air-ground-robot/
 │   ├── PX4移植规格.md                        移植前调研与架构选型
 │   ├── PX4移植实录.md                        移植过程与三大致命坑
 │   ├── 摆臂舵机接入PX4实录.md                舵机全链路 + PID 整定 + 极限环
-│   ├── PX4地面驱动方案.md                     控制方法主体（14 章 / 2086 行）
+│   ├── PX4地面驱动方案.md                     控制方法主体（14 章）
 │   └── 命令手册.md                           全部可复现命令
 │
 ├── 01-simulation/                          ★ 仿真世界代码
 │   ├── world/            robot.urdf / robot_orig.urdf / robot_world.sdf / meshes/
 │   ├── gz-model/         PX4 侧 Gazebo 模型（model.sdf + config + meshes）
-│   └── gz-plugin/        AirGroundMux.cc —— 自研 gz 插件源码（2033 行）
+│   └── gz-plugin/        AirGroundMux.cc —— 自研 gz 插件源码
 │
 ├── 02-flight-control/                      ★ 飞控命令代码
-│   ├── ground_drive/     地面驱动模块源码 + module.yaml（1301 行）
+│   ├── ground_drive/     地面驱动模块源码 + module.yaml
 │   └── airframes/        4030_airground（实机）/ 4030_gz_airground（SITL）
 │
 ├── 03-tools/                               ★ 调试与自动化代码
@@ -176,7 +136,7 @@ air-ground-robot/
 │   └── shell/            gui.sh / stop_all.sh / install_udev.sh / 50-stm32-dfu.rules
 │
 ├── 04-experiments/                         ★ 实验数据与日志
-│   ├── README.md         35 项实验台账（现象→假设→对照→排除→判据）
+│   ├── README.md         实验台账（现象→假设→对照→排除→判据）
 │   ├── data/             实验数据汇总.md —— 全部实测数值
 │   └── logs/             6 份代表性 .ulg 日志
 │
@@ -190,7 +150,7 @@ air-ground-robot/
 
 ---
 
-## 五、关键技术参数
+## 四、关键技术参数
 
 ### 机械构型
 
@@ -225,7 +185,7 @@ air-ground-robot/
 
 ---
 
-## 六、快速开始
+## 五、快速开始
 
 ### 纯 Gazebo 仿真（不接 PX4）
 
@@ -262,7 +222,7 @@ ground_drive status          # 查看摇杆 / 控制量 / 摆臂角
 
 ---
 
-## 七、文档导航
+## 六、文档导航
 
 | 想了解 | 看这里 |
 |:---|:---|
@@ -276,7 +236,7 @@ ground_drive status          # 查看摇杆 / 控制量 / 摆臂角
 
 ---
 
-## 八、已知限制与后续工作
+## 七、已知限制与后续工作
 
 | 项 | 状态 |
 |:---|:---|
@@ -287,6 +247,6 @@ ground_drive status          # 查看摇杆 / 控制量 / 摆臂角
 
 ---
 
-## 九、许可
+## 八、许可
 
 本项目为科研 / 教学用途。第三方组件（PX4-Autopilot）遵循其原始 **BSD-3-Clause** 许可。
