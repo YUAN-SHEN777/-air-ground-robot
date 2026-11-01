@@ -53,39 +53,56 @@ parameters:
 
       GD_ARM_MIN_DEG:
         description:
-          short: Minimum arm angle to enable wheel drive
+          short: Arm angle used for status warnings only
           long: |
-            The arm must be rotated to the wheel position before the ground
-            drive mode is allowed to arm (0 deg = propeller position,
-            52 deg = wheel position).
+            The 9th output controls the arm angle (0 deg = propeller position,
+            52 deg = wheel position). This parameter is now used only for
+            status / warning messages; it does NOT gate the ground drive mode.
+            The mode gate is GD_MODE_MIN_DEG, driven by the 10th output.
         type: float
         unit: deg
         decimal: 1
-        min: 30
+        min: 0
         max: 55
         increment: 0.5
-        default: 48
+        default: 30
+
+      GD_MODE_MIN_DEG:
+        description:
+          short: Minimum mode-switch angle to enable ground drive
+          long: |
+            The 10th output controls the flight/ground mode switch:
+              45 deg  = air mode (propellers engaged)
+              135 deg = ground mode (wheels engaged)
+            Ground drive is allowed only after the estimated mode-switch angle
+            reaches this threshold. The estimator is open-loop (no feedback),
+            using GD_SERVO_RATE and the commanded 10th-channel value.
+        type: float
+        unit: deg
+        decimal: 1
+        min: 45
+        max: 180
+        increment: 0.5
+        default: 135
 
       GD_SERVO_GATE:
         description:
-          short: Enable the arm-angle gate
+          short: Enable the mode-switch gate
           long: |
-            Master switch for both arm-angle gates:
+            Master switch for both mode-switch gates:
               - arming_check_reply.can_arm_and_run (mode entry / arming)
               - manualDrive() output gate (motors forced to 0)
 
-            When enabled (default) the arm must reach GD_ARM_MIN_DEG before
-            the ground drive mode can be armed, entered, or drive the wheel
-            motors.
+            When enabled (default) the 10th output (mode switch) must reach
+            GD_MODE_MIN_DEG before the ground drive mode can be armed, entered,
+            or drive the wheel motors. The 9th output (arm angle) is not used
+            for gating.
 
-            Set this to 0 ONLY for bench debugging while the arm servo is not
-            wired or not calibrated: GD_ARM_MIN_DEG is then ignored completely
-            and the wheel motors are driven even with the arm at 0 deg
-            (propeller position). ALWAYS remove the propellers and lift the
-            vehicle off the ground. Restore to 1 before any real operation.
-
-            Unlike lowering GD_ARM_MIN_DEG, this switch keeps the calibrated
-            threshold intact, so re-enabling restores the real safety limit.
+            Set this to 0 ONLY for bench debugging while the mode-switch servo
+            is not wired or not calibrated: the gate is then ignored completely
+            and the wheel motors are driven even in air mode. ALWAYS remove the
+            propellers and lift the vehicle off the ground. Restore to 1 before
+            any real operation.
         type: enum
         values:
           0: Disabled (bench debug only)

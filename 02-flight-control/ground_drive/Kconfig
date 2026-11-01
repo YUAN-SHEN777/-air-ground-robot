@@ -1,0 +1,7 @@
+menuconfig MODULES_GROUND_DRIVE
+	bool "ground_drive"
+	default n
+	---help---
+		Enable support for the ground drive external mode (wheeled mode).
+		Registers an external navigation mode that takes over actuator_motors
+		via setpoint_config{TYPE_DIRECT_ACTUATORS}.

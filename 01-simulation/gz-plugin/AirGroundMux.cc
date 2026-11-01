@@ -12,13 +12,16 @@
  * 它做什么
  * --------
  *   输入  A: gz.msgs.Actuators  "/<model>/command/motor_speed"   ← PX4 gz_bridge ESC 接口
- *   输入  B: 摆臂关节 servo_0 的实际角度（从 ECS 组件读，不是外推！）
+ *   输入  B: 10 路模式切换指令 /model/<model>/servo_1（gz.msgs.Double，弧度）
+ *            45° = 空中位，135° = 地面位；中间带滞回
+ *   输入  C: 摆臂关节 servo_0 的实际角度（仅用于日志，不参与模式判定）
  *
- *   if 摆臂 >= 阈值（地面位）:
+ *   if 模式切换 >= 135°（地面位）:
  *       桨  ← 发 0（多旋翼电机模型停止）
  *       轮  ← joint7..10 速度 = signed(velocity[i]) * (motor_max_omega/gear_ratio) * sign[i]
- *   else（飞行位）:
+ *   else if 模式切换 <= 45°（空中位）:
  *       桨  ← max(0, signed) * motor_max_omega，轮 ← 速度 0
+ *   中间角度保持上一次模式（滞回，避免抖动）
  *
  *   注意【不能两者都原样转发】：这里的 velocity 是「中位 = 停」编码，
  *   500 表示停而不是 500 rad/s 的怡速。
@@ -47,8 +50,10 @@
  * SDF 用法（写在 model.sdf 的 <model> 内）
  * ---------------------------------------
  *   <plugin filename="libairground_mux.so" name="airground::AirGroundMux">
- *     <servo_joint>servo_0</servo_joint>
- *     <arm_threshold_deg>48</arm_threshold_deg>
+ *     <servo_joint>servo_0</servo_joint>            <!-- 仅日志 -->
+ *     <mode_topic>/model/airground_0/servo_1</mode_topic>
+ *     <mode_air_deg>45</mode_air_deg>
+ *     <mode_ground_deg>135</mode_ground_deg>
  *     <wheel_joints>joint7 joint8 joint9 joint10</wheel_joints>
  *     <wheel_signs>-1 1 -1 1</wheel_signs>
  *     <gear_ratio>64</gear_ratio>
@@ -67,6 +72,7 @@
  */
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <mutex>
@@ -75,6 +81,7 @@
 #include <vector>
 
 #include <gz/msgs/actuators.pb.h>
+#include <gz/msgs/double.pb.h>
 #include <gz/plugin/Register.hh>
 #include <gz/sim/Model.hh>
 #include <gz/sim/System.hh>
@@ -105,6 +112,7 @@ public:
 
 private:
 	void OnActuators(const gz::msgs::Actuators &_msg);
+	void OnModeCommand(const gz::msgs::Double &_msg);
 
 	/// velocity → 有符号归一化 [-1, +1]（_zeroOffset / _halfSpan 决定中位与满量程）
 	/// NaN → 0（未使用的通道可能是 NaN；NaN*0 仍是 NaN，必须在此拦住）
@@ -121,9 +129,14 @@ private:
 	std::vector<gz::sim::Entity> _wheelJoints;
 
 	std::string _escTopic;
-	std::string _propTopic;
+	std::string _propTopic;	std::string _modeTopic;
 
-	double _armThresholdDeg{48.0};
+	//! 10 路模式切换指令角（度）。传输线程写、仿真线程读，用 atomic。
+	std::atomic<double> _modeAngleDeg{45.0};
+	//! 45° = 空中位，135° = 地面位；中间保持上一次模式（滞回）。
+	double _modeAirDeg{45.0};
+	double _modeGroundDeg{135.0};
+	bool _groundMode{false};
 	double _gearRatio{64.0};
 	//! 桨侧最大角速度（由推力标定决定，不能改）
 	double _motorMaxOmega{1000.0};
@@ -219,7 +232,16 @@ void AirGroundMux::Configure(const gz::sim::Entity &_entity,
 	};
 
 	const std::string servoJointName = getStr("servo_joint", "servo_0");
-	_armThresholdDeg = getDbl("arm_threshold_deg", 48.0);
+	_modeAirDeg = getDbl("mode_air_deg", 45.0);
+	_modeGroundDeg = getDbl("mode_ground_deg", 135.0);
+
+	if (!(_modeGroundDeg > _modeAirDeg)) {
+		gzerr << "[AirGroundMux] mode_ground_deg 必须大于 mode_air_deg，回落到 45/135" << std::endl;
+		_modeAirDeg = 45.0;
+		_modeGroundDeg = 135.0;
+	}
+
+	_modeAngleDeg.store(_modeAirDeg);
 	_gearRatio = getDbl("gear_ratio", 64.0);
 	_motorMaxOmega = getDbl("motor_max_omega", 1000.0);
 	_wheelMaxOmega = getDbl("wheel_max_omega", 0.0);
@@ -241,6 +263,8 @@ void AirGroundMux::Configure(const gz::sim::Entity &_entity,
 	// 默认话题按 PX4 gz_bridge 的命名推导：/<模型实例名>/command/motor_speed
 	_escTopic = getStr("esc_topic", "/" + modelName + "/command/motor_speed");
 	_propTopic = getStr("prop_topic", "/" + modelName + "/command/prop_speed");
+	// 10 路模式切换：PX4 gz_bridge 固定发到 /model/<实例名>/servo_1
+	_modeTopic = getStr("mode_topic", "/model/" + modelName + "/servo_1");
 
 	// ── 摆臂关节 ──
 	_servoJoint = FindJoint(_ecm, servoJointName);
@@ -251,7 +275,7 @@ void AirGroundMux::Configure(const gz::sim::Entity &_entity,
 
 	} else {
 		gzmsg << "[AirGroundMux] 摆臂关节 '" << servoJointName
-		      << "' 阈值 " << _armThresholdDeg << " deg" << std::endl;
+		      << "' 模式角 " << _modeAirDeg << " / " << _modeGroundDeg << " deg" << std::endl;
 	}
 
 	// ── 轮子关节 ──
@@ -283,7 +307,8 @@ void AirGroundMux::Configure(const gz::sim::Entity &_entity,
 	}
 
 	gzmsg << "[AirGroundMux] 轮子关节 " << _wheelJoints.size() << " 个；esc=" << _escTopic
-	      << " prop=" << _propTopic << std::endl;
+	      << " prop=" << _propTopic << " mode=" << _modeTopic
+	      << " (air=" << _modeAirDeg << "°, ground=" << _modeGroundDeg << "°)" << std::endl;
 	gzmsg << "[AirGroundMux] 换算：wheel_signed = (vel - " << _zeroOffset << ") / " << _halfSpan
 	      << "；wheel_omega = signed * (" << _wheelMaxOmega << " / " << _gearRatio << ")"
 	      << "；prop_omega = clamp((vel - " << _propZeroOffset << ") / "
@@ -301,6 +326,18 @@ void AirGroundMux::Configure(const gz::sim::Entity &_entity,
 	if (!_node.Subscribe(_escTopic, &AirGroundMux::OnActuators, this)) {
 		gzerr << "[AirGroundMux] 无法订阅 " << _escTopic << std::endl;
 	}
+
+	if (!_node.Subscribe(_modeTopic, &AirGroundMux::OnModeCommand, this)) {
+		gzerr << "[AirGroundMux] 无法订阅 " << _modeTopic << std::endl;
+	}
+}
+
+//////////////////////////////////////////////////
+
+void AirGroundMux::OnModeCommand(const gz::msgs::Double &_msg)
+{
+	// PX4 GZMixingInterfaceServo 发布的是弧度
+	_modeAngleDeg.store(_msg.data() * 180.0 / M_PI);
 }
 
 //////////////////////////////////////////////////
@@ -338,7 +375,27 @@ void AirGroundMux::PreUpdate(const gz::sim::UpdateInfo &_info,
 		}
 	}
 
-	const bool groundMode = (armDeg >= _armThresholdDeg);
+	// ── 模式判定只看 10 路模式切换，不看摆臂角 ──
+	// 45° = 空中、135° = 地面；中间保持上一次模式（滞回）。
+	// 留 1° 容差：PX4/Gazebo 的弧度↔角度换算会给出 45.000001° 这类值，
+	// 若严格比较 <=45，模式会永远回不到空中。
+	constexpr double kModeTolDeg{1.0};
+	const double modeDeg = _modeAngleDeg.load();
+	const bool prevGroundMode = _groundMode;
+
+	if (modeDeg >= _modeGroundDeg - kModeTolDeg) {
+		_groundMode = true;
+
+	} else if (modeDeg <= _modeAirDeg + kModeTolDeg) {
+		_groundMode = false;
+	}
+
+	const bool groundMode = _groundMode;
+
+	if (groundMode != prevGroundMode) {
+		gzmsg << "[AirGroundMux] mode -> " << (groundMode ? "GROUND" : "AIR")
+		      << " (switch=" << modeDeg << "°, arm=" << armDeg << "°)" << std::endl;
+	}
 
 	// ── 取最新指令 ──
 	std::vector<double> cmd;

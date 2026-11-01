@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(airground_mux LANGUAGES CXX)
+project(airground_plugins LANGUAGES CXX)
 
 # Gazebo Harmonic = gz-sim8 / transport13 / msgs10 / plugin2
 find_package(gz-cmake3 REQUIRED)
@@ -31,5 +31,20 @@ set_target_properties(airground_mux PROPERTIES
   INSTALL_RPATH ""
 )
 
-install(TARGETS airground_mux
+add_library(airground_revthrust SHARED AirGroundRevThrust.cc)
+
+target_link_libraries(airground_revthrust
+  PRIVATE
+    gz-sim${GZ_SIM_VER}::gz-sim${GZ_SIM_VER}
+    gz-transport${GZ_TRANSPORT_VER}::gz-transport${GZ_TRANSPORT_VER}
+    gz-msgs${GZ_MSGS_VER}::gz-msgs${GZ_MSGS_VER}
+    gz-plugin${GZ_PLUGIN_VER}::register
+)
+
+set_target_properties(airground_revthrust PROPERTIES
+  BUILD_WITH_INSTALL_RPATH TRUE
+  INSTALL_RPATH ""
+)
+
+install(TARGETS airground_mux airground_revthrust
   LIBRARY DESTINATION lib)

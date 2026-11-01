@@ -12,9 +12,10 @@
 #
 # 与仿真空气帧 init.d-posix/airframes/4030_gz_airground 的对应关系：
 #   SIM_GZ_EC_FUNC1..4 = 101..104  →  PWM_MAIN_FUNC1..4 = 101..104 + PWM_MAIN_TIM0
-#   SIM_GZ_SV_FUNC1    = 301       →  PWM_MAIN_FUNC9     = 301（+ FUNC10 同号同步）
+#   SIM_GZ_SV_FUNC1    = 301       →  PWM_MAIN_FUNC9     = 301（9 路摆臂角）
+#   SIM_GZ_SV_FUNC2    = 302       →  PWM_MAIN_FUNC10    = 302（10 路模式切换）
 #   SIM_GZ_EC_DISn     = 500       →  DShot 3D 下默认 1000 即中位，不用改
-#   SIM_GZ_SV_MINA/MAXA            →  PWM_MAIN_MIN9/MAX9（µs，需实测标定）
+#   SIM_GZ_SV_MINA/MAXA            →  PWM_MAIN_MIN9/MAX9 + MIN10/MAX10（µs，需实测标定）
 #
 # ⚠️ 本文件所有【接口类】参数用 param set 强制覆盖，理由同仿真：
 #    PX4 会把参数持久化到 /fs/microsd/params，一旦某次运行时改过，
@@ -127,44 +128,44 @@ param set DSHOT_3D_DEAD_H  1015
 # （0.10 时残余 control=0.0148 紧贴 ESC 死区边缘，余量不够）
 param set GD_STICK_DZ      0.15
 
-# ==================== 摆臂舵机（输出 9 / 10）====================
-# 功能号 301 = Peripheral_via_Actuator_Set 1（output_functions.yaml: 301..306）
-#   → 由 MAV_CMD_DO_SET_ACTUATOR(187) 驱动，也可被 MAV_CMD_ACTUATOR_TEST(310, p5=1301) 驱动
-# 两个舵机分配【同一功能号】，PX4 会把同一个值送到两路输出 → 物理级同步，不可能失步。
+# ==================== 9 路摆臂角 / 10 路模式切换 ====================
+# 实机两个舵机完全解耦：
+#   输出 9（1 号舵机）：摆臂角，0°=桨位，52°=轮位；
+#   输出 10（2 号舵机）：飞行/地面模式切换，45°=空中，135°=地面。
+# 功能号 301/302 = Peripheral_via_Actuator_Set 1/2
+#   → 187 param7=1 只写 9 路；param7=2 只写 10 路（依赖 FunctionActuatorSet 单通道支持）。
 param set PWM_MAIN_FUNC9  301
-param set PWM_MAIN_FUNC10 301
+param set PWM_MAIN_FUNC10 302
 
 # 舵机用传统 PWM，50 Hz
 param set PWM_MAIN_TIM3 50
 
-# 行程标定：MIN = 摆臂 0°，MAX = 摆臂 52°（对应 URDF 的 0 ~ 0.9076 rad）
-# ⚠️⚠️ 下面 1000/2000 是【占位值】，不是标定值！⚠️⚠️
-#   阶段 5 必须用舵机测试仪实测后改成真实 µs，否则可能顶到机械限位烧舵机。
+# 9 路摆臂角：MIN=0°，MAX=52°（对应 URDF 0~0.9076 rad）
+# ⚠️ 1000/2000 是占位值，必须用舵机测试仪实测后改成真实 µs。
 param set PWM_MAIN_MIN9 1000
 param set PWM_MAIN_MAX9 2000
 
-# 镜像侧（右摆臂）：对调 MIN/MAX 实现反向，比 PWM_MAIN_REV10 更可控
-#   （REV 是在软件里反算，对舵机这种非对称行程不安全）
-param set PWM_MAIN_MIN10 2000
-param set PWM_MAIN_MAX10 1000
+# 10 路模式切换：1000 µs → 45°（空中），2000 µs → 135°（地面）
+# ⚠️ 下面 1000/2000 同样是占位值；必须先确认方向：若 1000 对应 135°，
+#    把 MIN10/MAX10 对调，并同步 DIS10/FAIL10 到空中位。
+param set PWM_MAIN_MIN10 1000
+param set PWM_MAIN_MAX10 2000
 
-# 未解锁 / 失效保护时停在 MIN 侧 = 摆臂 0°
-param set PWM_MAIN_DIS9  1000
-param set PWM_MAIN_DIS10 1000
+# 未解锁 / 失效保护：
+#   9 路 → 1000 µs = 摆臂 0°（飞行安全位）
+#   10 路 → 1000 µs = 空中位（飞行安全位）
+param set PWM_MAIN_DIS9   1000
+param set PWM_MAIN_DIS10  1000
 param set PWM_MAIN_FAIL9  1000
 param set PWM_MAIN_FAIL10 1000
 #
-# ⚠️⚠️⚠️ 已知待决策问题（阶段 5 必须解决）⚠️⚠️⚠️
-#   ground_drive 的安全门要求「摆臂 ≥48° 才允许解锁」，而未解锁时舵机固定在 DIS=0°,
-#   于是实机存在自举死锁：
-#       摆臂 0°（DIS）→ ground_drive 拒绝解锁 → 187 在未解锁时不生效 → 摆臂永远到不了 48°
-#   仿真里是靠 COM_PREARM_MODE 2（prearmed）绕过的，但**带桨的实机不能开 prearmed**
-#   （prearmed = 全部输出通道带电）。
-#   两个候选方案，等阶段 5 标定完、确认"0°/52° 各自对应哪个物理姿态"后再定：
-#     A) 若 52° 才是地面位：把 DIS 改成 MIN 对面的值（如 PWM_MAIN_DIS9 2000），
-#        未解锁就停在地面位；飞行前再显式命令回 0°。
-#     B) 若 0° 才是地面位：直接降低 ground_drive 的解锁角度门限（改源码 GD_* 参数）。
-#   在此之前：**不要刷机试飞行** —— 这台机器人现在会拒绝在地面模式解锁（安全，但不可用）。
+# ⚠️⚠️⚠️ 上电 / 飞行前必须确认 ⚠️⚠️⚠️
+#   1. ground_drive 的门控现在只看 10 路：10 路 ≥135° 才允许进入地面模式；
+#   2. 未解锁时 187 需要 armed/prearmed 才生效。带桨禁止开 prearmed，
+#      因此实机必须用【拆桨 + 台架】或【独立 RC 开关/通道】先把 10 路切到 135°，
+#      再解锁进入 GROUND_DRIVE；
+#   3. 10 路的 1000/2000 µs 端点与方向必须实测标定，否则可能把模式舵机顶到机械限位。
+#   在此之前：不要带桨上电试飞。
 
 # ==================== 遥控链路 ====================
 # COM_RC_IN_MODE=5 = RC 优先 + MAVLink 兜底，两条手动控制通路都支持

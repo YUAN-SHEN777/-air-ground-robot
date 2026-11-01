@@ -1,0 +1,93 @@
+<?xml version="1.0" ?>
+<sdf version="1.9">
+  <world name="default">
+    <physics type="ode">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+      <real_time_update_rate>1000</real_time_update_rate>
+    </physics>
+    <gravity>0 0 0</gravity>
+
+    <model name="airground_0">
+      <static>false</static>
+
+      <link name="base_link">
+        <inertial>
+          <mass>1.0</mass>
+          <inertia><ixx>0.01</ixx><ixy>0</ixy><ixz>0</ixz><iyy>0.01</iyy><iyz>0</iyz><izz>0.01</izz></inertia>
+        </inertial>
+      </link>
+
+      <link name="arm_link">
+        <inertial>
+          <mass>0.1</mass>
+          <inertia><ixx>0.001</ixx><ixy>0</ixy><ixz>0</ixz><iyy>0.001</iyy><iyz>0</iyz><izz>0.001</izz></inertia>
+        </inertial>
+      </link>
+
+      <joint name="servo_0" type="revolute">
+        <parent>base_link</parent>
+        <child>arm_link</child>
+        <axis>
+          <xyz>0 0 1</xyz>
+          <limit><lower>-3.14</lower><upper>3.14</upper></limit>
+        </axis>
+      </joint>
+
+      <link name="wheel_link7">
+        <inertial><mass>0.1</mass><inertia><ixx>0.001</ixx><ixy>0</ixy><ixz>0</ixz><iyy>0.001</iyy><iyz>0</iyz><izz>0.001</izz></inertia></inertial>
+      </link>
+      <joint name="joint7" type="revolute">
+        <parent>base_link</parent><child>wheel_link7</child>
+        <axis><xyz>0 1 0</xyz><limit><lower>-1000</lower><upper>1000</upper></limit></axis>
+      </joint>
+
+      <link name="wheel_link8">
+        <inertial><mass>0.1</mass><inertia><ixx>0.001</ixx><ixy>0</ixy><ixz>0</ixz><iyy>0.001</iyy><iyz>0</iyz><izz>0.001</izz></inertia></inertial>
+      </link>
+      <joint name="joint8" type="revolute">
+        <parent>base_link</parent><child>wheel_link8</child>
+        <axis><xyz>0 1 0</xyz><limit><lower>-1000</lower><upper>1000</upper></limit></axis>
+      </joint>
+
+      <link name="wheel_link9">
+        <inertial><mass>0.1</mass><inertia><ixx>0.001</ixx><ixy>0</ixy><ixz>0</ixz><iyy>0.001</iyy><iyz>0</iyz><izz>0.001</izz></inertia></inertial>
+      </link>
+      <joint name="joint9" type="revolute">
+        <parent>base_link</parent><child>wheel_link9</child>
+        <axis><xyz>0 1 0</xyz><limit><lower>-1000</lower><upper>1000</upper></limit></axis>
+      </joint>
+
+      <link name="wheel_link10">
+        <inertial><mass>0.1</mass><inertia><ixx>0.001</ixx><ixy>0</ixy><ixz>0</ixz><iyy>0.001</iyy><iyz>0</iyz><izz>0.001</izz></inertia></inertial>
+      </link>
+      <joint name="joint10" type="revolute">
+        <parent>base_link</parent><child>wheel_link10</child>
+        <axis><xyz>0 1 0</xyz><limit><lower>-1000</lower><upper>1000</upper></limit></axis>
+      </joint>
+
+      <plugin name="airground::AirGroundMux"
+              filename="/home/yuan/PX4-Autopilot/Tools/simulation/gz/models/airground/libairground_mux.so">
+        <servo_joint>servo_0</servo_joint>
+        <mode_topic>/model/airground_0/servo_1</mode_topic>
+        <mode_air_deg>45</mode_air_deg>
+        <mode_ground_deg>135</mode_ground_deg>
+        <wheel_joints>joint7 joint8 joint9 joint10</wheel_joints>
+        <wheel_signs>1 1 1 1</wheel_signs>
+        <gear_ratio>64</gear_ratio>
+        <motor_max_omega>1000</motor_max_omega>
+        <wheel_max_omega>2400</wheel_max_omega>
+        <zero_offset>500</zero_offset>
+        <half_span>500</half_span>
+        <prop_zero_offset>500</prop_zero_offset>
+        <esc_topic>/airground_0/command/motor_speed</esc_topic>
+        <prop_topic>/airground_0/command/prop_speed</prop_topic>
+      </plugin>
+
+      <plugin name="gz::sim::systems::JointStatePublisher"
+              filename="gz-sim-joint-state-publisher-system">
+        <topic>/joint_state</topic>
+      </plugin>
+    </model>
+  </world>
+</sdf>

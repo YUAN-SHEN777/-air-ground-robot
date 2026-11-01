@@ -27,10 +27,6 @@ from gz.msgs10.model_pb2 import Model
 from gz.msgs10.double_pb2 import Double
 
 HERE = Path(__file__).resolve().parent
-# 仓库结构：本脚本在 03-tools/servo/ 下，模型文件在 <repo>/01-simulation/world/
-_SIM = HERE.parent.parent / "01-simulation" / "world"
-if not (HERE / "robot.urdf").exists() and (_SIM / "robot.urdf").exists():
-    HERE = _SIM
 SRC_URDF = HERE / "robot.urdf"
 SRC_WORLD = HERE / "robot_world.sdf"
 TUNE_URDF = HERE / "robot_tune.urdf"

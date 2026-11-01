@@ -1,3 +1,168 @@
+diff --git a/ROMFS/px4fmu_common/init.d-posix/airframes/4030_gz_airground b/ROMFS/px4fmu_common/init.d-posix/airframes/4030_gz_airground
+new file mode 100644
+index 0000000000..88c655d681
+--- /dev/null
++++ b/ROMFS/px4fmu_common/init.d-posix/airframes/4030_gz_airground
+@@ -0,0 +1,159 @@
++. ${R}etc/init.d/rc.mc_defaults
++
++PX4_SIMULATOR=${PX4_SIMULATOR:=gz}
++PX4_GZ_WORLD=${PX4_GZ_WORLD:=airground}
++PX4_SIM_MODEL=${PX4_SIM_MODEL:=airground}
++
++# ⚠️⚠️ 这里为什么用 param set（强制），而不是 param set-default？ ⚠️⚠️
++#
++#   param set-default  =「只在参数【还没有值】时才写入」
++#   而 PX4 SITL 会把参数【持久化】到 build/px4_sitl_default/rootfs/parameters.bson
++#   → 只要 bson 里已经有这个参数（比如某次调试时运行时改过），
++#     airframe 里的 set-default 就【永远不再生效】，表现为
++#     “代码明明改了，跑起来却没变化”（踩过两次）。
++#
++#   所以：【机体接口类】参数一律用 param set 强制覆盖，保证每次启动都是对的。
++#         【性能调参类】（如 MPC_THR_HOVER）保留 set-default，允许用户覆盖微调。
++
++# ==================== 接口使能 ====================
++param set SIM_GZ_EN 1
++
++# ==================== 多旋翼控制分配 ====================
++param set CA_AIRFRAME 0
++param set CA_ROTOR_COUNT 4
++
++# 桨0 前左 (joint3 -> link1)
++param set CA_ROTOR0_PX +0.1008
++param set CA_ROTOR0_PY +0.1100
++param set CA_ROTOR0_KM +0.05
++
++# 桨1 前右 (joint4 -> link2)
++param set CA_ROTOR1_PX +0.1008
++param set CA_ROTOR1_PY -0.1100
++param set CA_ROTOR1_KM -0.05
++
++# 桨2 后左 (joint5 -> link3)
++param set CA_ROTOR2_PX -0.1092
++param set CA_ROTOR2_PY +0.1100
++param set CA_ROTOR2_KM -0.05
++
++# 桨3 后右 (joint6 -> link4)
++param set CA_ROTOR3_PX -0.1092
++param set CA_ROTOR3_PY -0.1100
++param set CA_ROTOR3_KM +0.05
++
++# ==================== 桨通道：单向推力 ====================
++# ⚠️ 必须显式写死（不能用默认值）：PX4 SITL 会把参数持久化到
++#    build/px4_sitl_default/rootfs/parameters.bson。若之前调试时留过
++#    CA_R_REV=15，这里不强制覆盖就会沿用旧值，表现为偏航异常。
++#
++#    CA_R_REV 是【通道级】双向标志，桨和轮共用 CA_ROTOR0..3：
++#      · 轮只有地面模式才需要双向（由 AirGroundMux 用 zero_offset=500 解码）
++#      · 桨只需要单向 0..1 推力，零推力点在 0
++#    所以飞行侧固定 REV=0 + DIS=0；轮的换向交给 mux 自己处理。
++#
++# 当前取值：CA_R_REV=15  EC_DIS=500（由环境变量 CA_R_REV / EC_DIS 控制）
++param set CA_R_REV 15
++param set SIM_GZ_EC_DIS1 500
++param set SIM_GZ_EC_DIS2 500
++param set SIM_GZ_EC_DIS3 500
++param set SIM_GZ_EC_DIS4 500
++
++# ==================== 传感器使能 ====================
++param set SENS_EN_MAGSIM 0
++
++# ==================== 仿真环境配置（解锁必需）====================
++# 实测教训：不加这两行，ARM 命令虽然回 ACCEPTED，
++#           但 HEARTBEAT 的解锁位始终是 False —— 飞机根本没解锁。
++#           后果极其隐蔽：gz_bridge 里 _armed.armed=false → 所有输出取
++#           DIS 值 → 舵机永远停在 DIS 位，看起来像【机构卡死】。
++#
++# 根因在 commander 的 modeCheck：
++#   if (manual_control_signal_lost && mode_req_manual_control != 0) {
++#       ... reporter.clearArmingBits(mode_req_manual_control);   # 无条件执行
++#   }
++# 开机默认 Position 模式【需要摇杆】，仿真里既无遥控器也没摇杆
++# → 该模式被 clearArmingBits 移出可解锁集合 → 解锁被拒。
++#
++# COM_RC_IN_MODE=1 = MAVLink only，禁用 RC 及相关解锁前检查。
++# QGC 的虚拟摇杆走 MANUAL_CONTROL（就是 MAVLink），所以这个值不冲突。
++param set COM_RC_IN_MODE 1
++
++# 数据链丢失保护：纯仿真无真实数传链路，关掉（默认即 0，显式写出防污染）
++param set NAV_DLL_ACT 0
++
++# ==================== 悬停油门（性能调参类，保留 set-default）====================
++# PX4 默认 MPC_THR_HOVER=0.5，但我们的实际悬停油门是 1/sqrt(TWR)。
++# TWR=3 时 = 1/sqrt(3) = 0.577。不设的话 PX4 会以为 50% 就该悬停，
++# 结果起飞油门爬到 575 就停住，机器人抬不起来。
++param set-default MPC_THR_HOVER 0.5774
++
++# ==================== ESC / 舵机 功能映射 ====================
++# 电机输出 1~4 → Gazebo 侧 4 个 MulticopterMotorModel
++param set SIM_GZ_EC_FUNC1 101
++param set SIM_GZ_EC_FUNC2 102
++param set SIM_GZ_EC_FUNC3 103
++param set SIM_GZ_EC_FUNC4 104
++
++# ==================== 9 路摆臂角 / 10 路模式切换 ====================
++# 功能编号（来自 PX4 的 output_functions.yaml）：
++#   201~215 = Servo 1~15      ← 由 uORB actuator_servos 驱动（多旋翼下是 NaN）
++#   301~306 = Peripheral_via_Actuator_Set 1~6 ← 由 MAV_CMD_DO_SET_ACTUATOR 驱动 ✅
++#   407~412 = RC_AUX1~6       ← 由 manual_control_setpoint.aux1~6 驱动
++# 默认选 301：可直接用 DO_SET_ACTUATOR 控制，简单且可脚本化。
++# 用 SERVO_SRC=aux1 可改成 407，让舵机跟随一个连续通道（滑条/手柄）。
++param set SIM_GZ_SV_FUNC1 301
++#
++#   9 路（servo_0）= 摆臂角；10 路（servo_1）= 飞行/地面模式切换。
++#   实机两个舵机完全解耦：1 号管摆臂角（0.7 N·m + 20:1 蜗轮蜗杆），
++#   2 号管模式切换（45° = 空中，135° = 地面）。
++#   仿真里 servo_0 / servo_1 两个摆臂关节仍共用 /servo_0，只复现摆臂角。
++param set SIM_GZ_SV_FUNC2 302
++
++# 输入值域：注意！SIM_GZ_SV_MIN/MAX/DIS/FAIL 是【0~1000 的整数】，不是 [-1,1]！
++#   源码 module.yaml 的 standard_params 定义：
++#       disarmed {min:0, max:1000, default:500}
++#       min      {min:0, max:1000, default:0}
++#       max      {min:0, max:1000, default:1000}
++#       failsafe {min:0, max:1000}
++#   mixer_module.cpp 的 updateParams() 用 param_get(..., &int32_t) 读取，
++#   越界（比如写 -1）会被拒 → 回落成上面那个 default。
++#
++# 两层映射（务必分清）：
++#   第 1 层  mixer_module（-> outputs[i]，范围 [0,1000]）：
++#       收到 DO_SET_ACTUATOR:  outputs = interpolate(param1, -1,1,  MIN1, MAX1)
++#       没收到命令（NAN）  :  outputs = DIS1
++#   第 2 层  GZMixingInterfaceServo（-> 关节角度）：
++#       angle = MINA1 + (MAXA1-MINA1) * (outputs - MIN1) / (MAX1 - MIN1)
++#
++# 所以取 MIN1=0 / MAX1=1000，第 1 层就是恒等变换，查表最直观：
++#       param1 = -1  ->  outputs=0    -> angle = 0°
++#       param1 =  0  ->  outputs=500  -> angle = 26°
++#       param1 = +1  ->  outputs=1000 -> angle = 52°
++param set SIM_GZ_SV_MIN1  0
++param set SIM_GZ_SV_MAX1  1000
++
++# 角度范围（度）—— 对应 URDF 里摆臂的 0 ~ 0.9076 rad
++param set SIM_GZ_SV_MINA1 0
++param set SIM_GZ_SV_MAXA1 52
++
++# 未解锁 → outputs = DIS1 = 0 → angle = MINA1 = 0°（摆臂水平 = 飞行安全位）
++# 失效保护 → 同上，也停在 0°
++param set SIM_GZ_SV_DIS1  0
++param set SIM_GZ_SV_FAIL1 0
++
++# ── 10 路模式切换：45° = 空中，135° = 地面 ──
++#   DO_SET_ACTUATOR(187) param2 = -1 → 45°；+1 → 135°
++param set SIM_GZ_SV_MIN2  0
++param set SIM_GZ_SV_MAX2  1000
++param set SIM_GZ_SV_MINA2 45
++param set SIM_GZ_SV_MAXA2 135
++param set SIM_GZ_SV_DIS2  0
++param set SIM_GZ_SV_FAIL2 0
++
++# ==================== 地面驱动模块 ====================
++# GROUND_DRIVE 外部模式：摆臂摆到 52° 后从 QGC / `commander mode extN` 切进去，
++# 该模块独占 actuator_motors（飞行模式下常驻但不写电机，arming check 也不干扰）。
++# ⚠️ 若模块没编译进去（CONFIG_MODULES_GROUND_DRIVE=n），
++#    这一行只会打印 unknown command，不影响其它启动流程。
++ground_drive start
 diff --git a/ROMFS/px4fmu_common/init.d-posix/airframes/CMakeLists.txt b/ROMFS/px4fmu_common/init.d-posix/airframes/CMakeLists.txt
 index ce93573d15..f46d951f70 100644
 --- a/ROMFS/px4fmu_common/init.d-posix/airframes/CMakeLists.txt
@@ -10,6 +175,231 @@ index ce93573d15..f46d951f70 100644
  
  	5001_xplane_cessna172
  	5002_xplane_tb2
+diff --git a/ROMFS/px4fmu_common/init.d/airframes/4030_airground b/ROMFS/px4fmu_common/init.d/airframes/4030_airground
+new file mode 100644
+index 0000000000..41ebc29712
+--- /dev/null
++++ b/ROMFS/px4fmu_common/init.d/airframes/4030_airground
+@@ -0,0 +1,219 @@
++#!/bin/sh
++#
++# @name Air-Ground Robot (props share motors with wheels)
++#
++# @type Quadrotor x
++# @class Copter
++#
++# @maintainer yuan
++#
++# 空陆两栖机器人：4 个电机，桨与轮 XY 完全同轴（同一个电机驱动），
++# 地面侧经 64:1 行星减速器，空中/地面由机构切换。
++#
++# 与仿真空气帧 init.d-posix/airframes/4030_gz_airground 的对应关系：
++#   SIM_GZ_EC_FUNC1..4 = 101..104  →  PWM_MAIN_FUNC1..4 = 101..104 + PWM_MAIN_TIM0
++#   SIM_GZ_SV_FUNC1    = 301       →  PWM_MAIN_FUNC9     = 301（9 路摆臂角）
++#   SIM_GZ_SV_FUNC2    = 302       →  PWM_MAIN_FUNC10    = 302（10 路模式切换）
++#   SIM_GZ_EC_DISn     = 500       →  DShot 3D 下默认 1000 即中位，不用改
++#   SIM_GZ_SV_MINA/MAXA            →  PWM_MAIN_MIN9/MAX9 + MIN10/MAX10（µs，需实测标定）
++#
++# ⚠️ 本文件所有【接口类】参数用 param set 强制覆盖，理由同仿真：
++#    PX4 会把参数持久化到 /fs/microsd/params，一旦某次运行时改过，
++#    airframe 里的 set-default 就永远不再生效（表现为"改了没反应"）。
++#    【调参类】（MPC_THR_HOVER 等）保留 set-default，允许现场覆盖。
++#
++
++. ${R}etc/init.d/rc.mc_defaults
++
++# ==================== 机体几何（控制分配）====================
++# CA_AIRFRAME=0 = 通用多旋翼，几何完全由 CA_ROTOR* 手工给定
++param set CA_AIRFRAME 0
++param set CA_ROTOR_COUNT 4
++
++# 桨0 前左
++param set CA_ROTOR0_PX +0.1008
++param set CA_ROTOR0_PY +0.1100
++param set CA_ROTOR0_KM +0.05
++
++# 桨1 前右
++param set CA_ROTOR1_PX +0.1008
++param set CA_ROTOR1_PY -0.1100
++param set CA_ROTOR1_KM -0.05
++
++# 桨2 后左
++param set CA_ROTOR2_PX -0.1092
++param set CA_ROTOR2_PY +0.1100
++param set CA_ROTOR2_KM -0.05
++
++# 桨3 后右
++param set CA_ROTOR3_PX -0.1092
++param set CA_ROTOR3_PY -0.1100
++param set CA_ROTOR3_KM +0.05
++#
++# ⚠️ KM 符号 = 该桨在【世界坐标】下的旋转方向，不是简单的对角配对。
++#    规格书原文：「符号方向必须实测验证，若偏航反向就把四个符号全部取反」。
++#    验证方法见 docs/实机调试步骤.md「阶段 8」。
++
++# ==================== 电机输出（micoair h743-v2）====================
++# 本板 DIRECT_PWM_OUTPUT_CHANNELS = 10，无 IO 协处理器 → 参数前缀是 PWM_MAIN。
++# 定时器分组（Tools/module_config/output_groups_from_timer_config.py 实测）：
++#
++#   输出     定时器    DMA/DShot   协议参数
++#   1-4      TIM1      ✅          PWM_MAIN_TIM0   ← 4 个电机
++#   5-6      TIM3      ✅          PWM_MAIN_TIM1
++#   7-8      TIM4      ✅          PWM_MAIN_TIM2
++#   9-10     TIM15     ❌ 无 DMA   PWM_MAIN_TIM3   ← 2 个摆臂舵机
++#
++# ⚠️ PWM_MAIN_TIMn 的 n 是 io_timers[] 数组下标（从 0 开始），
++#    不是硬件定时器号：TIM1→TIM0、TIM3→TIM1、TIM4→TIM2、TIM15→TIM3。
++param set PWM_MAIN_FUNC1 101
++param set PWM_MAIN_FUNC2 102
++param set PWM_MAIN_FUNC3 103
++param set PWM_MAIN_FUNC4 104
++
++# 输出协议取值（pwm_out/module.yaml 枚举，注意负数顺序是反的）：
++#   -8=BDShot150  -7=BDShot300  -6=BDShot600
++#   -5=DShot150   -4=DShot300   -3=DShot600   -1=OneShot
++#   50/100/200/400 = PWM 频率
++# 选 -4 = DShot300：与板级 rc.board_defaults 的默认值一致，是 bring-up 阶段
++# 最稳的档位（DShot600 对走线质量更敏感，先不用）。
++# 只有 TIM0 这一组切 DShot；下面 TIM3 保持 PWM50 给舵机。
++param set PWM_MAIN_TIM0 -4
++
++# 电机 MIN/MAX/DIS 不用写：
++#   DShot 模式下 min/max 参数被隐藏且忽略（mixer_module 用 0..1999 + 3D 缩放），
++#   PWM_MAIN_DIS1..4 默认 1000 ≈ DShot 3D 中位（DSHOT_3D_SPLIT），即"停"。
++#   ⚠️ 上电必须实测确认：未解锁时电机静止。
++
++# ==================== 电机双向（地面倒车必需）====================
++# 4 路电机全部标记为可逆。
++#   实车：DShot 驱动靠该位启用 3D —— apply_min_values() 把可逆通道的 min 改成 48，
++#         使 control=0 正好落在 DSHOT_3D_SPLIT，实现"负值反转"。
++#   ⚠️ 前提：4 个电调必须刷【Bluejay 3D】或【AM32】双向固件。
++#      原生 BLHeli_S 单向固件下负指令会被当 0，表现是"只能前进、倒不了车"。
++param set CA_R_REV 15
++
++# ==================== DShot 3D 中位死区（ESC 侧）2026-10-22 ====================
++#
++# 🔴 为什么必须设：DSHOT_3D_DEAD_L/H 的默认值是 1000/1000 —— 一个【单点】死区。
++#    DShot.cpp:762 的逻辑：
++#        if (reversible && output >= _3d_dead_l && output <= _3d_dead_h)
++#                return DSHOT_DISARM_VALUE;        // 直接发 MOTOR_STOP
++#    ⇒ 只有当 mixer 输出【精确等于】1000 时电机才停。
++#    实测：摇杆回中时 manual_control_setpoint.throttle 是 +0.12 而不是 0，
++#    经 ground_drive 换算成 control≈0.096 → mixer 输出 ≈1096 → 落在死区外
++#    → 电机以 ~2200 rpm 空转（轮子挂在 64:1 减速器后面，电机必须转得很快，
++#      而同轴的桨也会跟着高速转，声音很大、很吓人）。
++#
++# 量纲：以 mixer_module 的 0..1999 表示（1000 = 中位），不是 DShot 值。
++#
++# 🔴🔴 死区必须【远小于】转向指令，否则会把原地转向整个吃掉（2026-10-22 实测踩到）：
++#    原地转向不靠 v_cmd（GD_TURN_SLOW=1.0 时满舵把前进量精确归零），只靠差速：
++#        w_cmd   = GD_YAW_GAIN(1.5) * roll(1.0) = 1.5 rad/s
++#        Δv      = w_cmd * W/2 = 1.5 * 0.0825 = 0.124 m/s
++#        control = Δv * 64 / (0.04 * 2400) = ±0.0825
++#        mixer   = 917.5 / 1082.5
++#    曾把死区设成 900..1100（±0.10）—— **比打满舵的 ±0.0825 还大**
++#    ⇒ 两个轮子全部强制 MOTOR_STOP，症状是「左右打到底完全没反应，只有前后能动」。
++#
++#    分工原则（不能搞反）：
++#      摇杆层 GD_STICK_DZ   负责「回中即停」（处理摇杆偏置，实测达 +0.12）
++#      ESC 层 DSHOT_3D_DEAD 只负责「真正归零」的兜底，量级 ±0.015 即可
++param set DSHOT_3D_ENABLE  1
++param set DSHOT_MIN        0
++param set DSHOT_3D_DEAD_L  985
++param set DSHOT_3D_DEAD_H  1015
++
++# 摇杆死区：0.15 能把实测的 thr=+0.12 偏置完全压成 0
++# （0.10 时残余 control=0.0148 紧贴 ESC 死区边缘，余量不够）
++param set GD_STICK_DZ      0.15
++
++# ==================== 9 路摆臂角 / 10 路模式切换 ====================
++# 实机两个舵机完全解耦：
++#   输出 9（1 号舵机）：摆臂角，0°=桨位，52°=轮位；
++#   输出 10（2 号舵机）：飞行/地面模式切换，45°=空中，135°=地面。
++# 功能号 301/302 = Peripheral_via_Actuator_Set 1/2
++#   → 187 param7=1 只写 9 路；param7=2 只写 10 路（依赖 FunctionActuatorSet 单通道支持）。
++param set PWM_MAIN_FUNC9  301
++param set PWM_MAIN_FUNC10 302
++
++# 舵机用传统 PWM，50 Hz
++param set PWM_MAIN_TIM3 50
++
++# 9 路摆臂角：MIN=0°，MAX=52°（对应 URDF 0~0.9076 rad）
++# ⚠️ 1000/2000 是占位值，必须用舵机测试仪实测后改成真实 µs。
++param set PWM_MAIN_MIN9 1000
++param set PWM_MAIN_MAX9 2000
++
++# 10 路模式切换：1000 µs → 45°（空中），2000 µs → 135°（地面）
++# ⚠️ 下面 1000/2000 同样是占位值；必须先确认方向：若 1000 对应 135°，
++#    把 MIN10/MAX10 对调，并同步 DIS10/FAIL10 到空中位。
++param set PWM_MAIN_MIN10 1000
++param set PWM_MAIN_MAX10 2000
++
++# 未解锁 / 失效保护：
++#   9 路 → 1000 µs = 摆臂 0°（飞行安全位）
++#   10 路 → 1000 µs = 空中位（飞行安全位）
++param set PWM_MAIN_DIS9   1000
++param set PWM_MAIN_DIS10  1000
++param set PWM_MAIN_FAIL9  1000
++param set PWM_MAIN_FAIL10 1000
++#
++# ⚠️⚠️⚠️ 上电 / 飞行前必须确认 ⚠️⚠️⚠️
++#   1. ground_drive 的门控现在只看 10 路：10 路 ≥135° 才允许进入地面模式；
++#   2. 未解锁时 187 需要 armed/prearmed 才生效。带桨禁止开 prearmed，
++#      因此实机必须用【拆桨 + 台架】或【独立 RC 开关/通道】先把 10 路切到 135°，
++#      再解锁进入 GROUND_DRIVE；
++#   3. 10 路的 1000/2000 µs 端点与方向必须实测标定，否则可能把模式舵机顶到机械限位。
++#   在此之前：不要带桨上电试飞。
++
++# ==================== 遥控链路 ====================
++# COM_RC_IN_MODE=5 = RC 优先 + MAVLink 兜底，两条手动控制通路都支持
++param set COM_RC_IN_MODE 5
++
++# rc_update.cpp:154 的 _rc_calibrated 要求：
++#     RC_CHAN_CNT > 0 且 RC_MAP_{ROLL|PITCH|THROTTLE|YAW} 至少一个 > 0
++# 不满足时 manual_control_input.valid 恒 false，RC 通路等于不存在。
++# ⚠️ PX4 v1.18 的 RC_MAP_* 默认全是 0（不是常见的 1/2/3/4）。
++# AETR：CH1=副翼(roll) CH2=升降(pitch) CH3=油门 CH4=方向(yaw)
++param set RC_CHAN_CNT 8
++param set RC_MAP_ROLL 1
++param set RC_MAP_PITCH 2
++param set RC_MAP_THROTTLE 3
++param set RC_MAP_YAW 4
++
++# 遥控丢失豁免：bit3 = External Mode。
++# 地面模式下 PX4 会用 NAV_RCL_ACT 处理"摇杆丢了"，导致地上的机器人去 RTL 起飞；
++# 而 ground_drive 自己已处理失联（manualDrive() 里 mcs.valid=false → 输出 0）。
++# 豁免后仅影响外部模式；飞行模式（Position 等）仍保留 Return 保护。
++param set COM_RCL_EXCEPT 8
++
++# 解锁后不起飞自动上锁：关闭（地面模式需要长期 armed，开一段停一段）
++param set COM_DISARM_PRFLT 0
++# 着陆后自动上锁：关闭（地面模式轮子打滑会被 land detector 误判起飞→落地→上锁）
++param set COM_DISARM_LAND 0
++#
++# ⚠️ 与仿真不同：这里【不设】NAV_DLL_ACT。
++#    仿真是纯本地回环、没有真实数传；实机有数传链路，
++#    数据链丢失时应当保留 PX4 默认的保护动作，不要照抄仿真关掉。
++
++# ==================== 悬停油门（调参类，保留 set-default）====================
++# 默认 0.5，实际悬停油门 = 1/sqrt(TWR)。TWR=3 时 = 0.5774。
++# ⚠️ 实机重量与仿真不同，装好整机后必须重新称重、重算 TWR 再改这里。
++param set-default MPC_THR_HOVER 0.5774
++
++# ==================== 地面驱动标定 ====================
++# GD_MAX_OMEGA = 电机侧最大角速度，ground_drive 用它做归一化。
++# ⚠️ 仿真里 2400 是配 model.sdf 的 AirGroundMux；实机必须按真实电机 KV
++#    和 64:1 减速比重算，否则「指令速度 ≠ 实际速度」。
++#    轮顶速 = GD_MAX_OMEGA / 64 × 轮半径(0.04 m)
++param set GD_MAX_OMEGA 2400
++# 目标最大行驶速度（m/s）
++param set GD_MAX_SPEED 1.2
++# 满舵时纵向速度精确归零（纯原地搓转）
++param set GD_TURN_SLOW 1.0
++
++# ==================== 地面驱动模块 ====================
++# GROUND_DRIVE 外部模式：`commander mode ext1` 进入，独占 actuator_motors。
++# ⚠️ 若模块没编译进去（CONFIG_MODULES_GROUND_DRIVE=n），这里只会打印 unknown command。
++ground_drive start
 diff --git a/ROMFS/px4fmu_common/init.d/airframes/CMakeLists.txt b/ROMFS/px4fmu_common/init.d/airframes/CMakeLists.txt
 index 0595abe4a7..f97a73cdff 100644
 --- a/ROMFS/px4fmu_common/init.d/airframes/CMakeLists.txt
@@ -48,3 +438,1490 @@ index 7c3f78d7e9..cee8c62d9a 100644
  CONFIG_MODULES_GYRO_CALIBRATION=y
  CONFIG_MODULES_GYRO_FFT=y
  CONFIG_MODULES_LAND_DETECTOR=y
+diff --git a/src/lib/mixer_module/functions/FunctionActuatorSet.hpp b/src/lib/mixer_module/functions/FunctionActuatorSet.hpp
+index be9762fa01..18c50a27cb 100644
+--- a/src/lib/mixer_module/functions/FunctionActuatorSet.hpp
++++ b/src/lib/mixer_module/functions/FunctionActuatorSet.hpp
+@@ -73,6 +73,10 @@ public:
+ 					if (PX4_ISFINITE(vehicle_command.param5)) {_data[4] = vehicle_command.param5; }
+ 
+ 					if (PX4_ISFINITE(vehicle_command.param6)) {_data[5] = vehicle_command.param6; }
++				} else if ((index >= 1) && (index <= max_num_actuators)) {
++					// MAVLink DO_SET_ACTUATOR single-actuator form:
++					//   param7 = actuator index (1..6), param1 = value for that actuator.
++					if (PX4_ISFINITE(vehicle_command.param1)) { _data[index - 1] = vehicle_command.param1; }
+ 				}
+ 			}
+ 		}
+diff --git a/src/modules/ground_drive/CMakeLists.txt b/src/modules/ground_drive/CMakeLists.txt
+new file mode 100644
+index 0000000000..f272cb5022
+--- /dev/null
++++ b/src/modules/ground_drive/CMakeLists.txt
+@@ -0,0 +1,46 @@
++############################################################################
++#
++#   Copyright (c) 2026 PX4 Development Team. All rights reserved.
++#
++# Redistribution and use in source and binary forms, with or without
++# modification, are permitted provided that the following conditions
++# are met:
++#
++# 1. Redistributions of source code must retain the above copyright
++#    notice, this list of conditions and the following disclaimer.
++# 2. Redistributions in binary form must reproduce the above copyright
++#    notice, this list of conditions and the following disclaimer in
++#    the documentation and/or other materials provided with the
++#    distribution.
++# 3. Neither the name PX4 nor the names of its contributors may be
++#    used to endorse or promote products derived from this software
++#    without specific prior written permission.
++#
++# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
++# "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
++# LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
++# FOR A PARTICULAR PURPOSNE ARE DISCLAIMED. IN NO EVENT SHALL THE
++# COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
++# INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
++# BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
++# OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
++# AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
++# LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
++# ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
++# POSSIBILITY OF SUCH DAMAGE.
++#
++############################################################################
++
++px4_add_module(
++	MODULE modules__ground_drive
++	MAIN ground_drive
++	STACK_MAIN 2048
++	SRCS
++		ground_drive.cpp
++		ground_drive.hpp
++	DEPENDS
++		mathlib
++		px4_work_queue
++	MODULE_CONFIG
++		module.yaml
++)
+diff --git a/src/modules/ground_drive/Kconfig b/src/modules/ground_drive/Kconfig
+new file mode 100644
+index 0000000000..d52ed2298b
+--- /dev/null
++++ b/src/modules/ground_drive/Kconfig
+@@ -0,0 +1,7 @@
++menuconfig MODULES_GROUND_DRIVE
++	bool "ground_drive"
++	default n
++	---help---
++		Enable support for the ground drive external mode (wheeled mode).
++		Registers an external navigation mode that takes over actuator_motors
++		via setpoint_config{TYPE_DIRECT_ACTUATORS}.
+diff --git a/src/modules/ground_drive/ground_drive.cpp b/src/modules/ground_drive/ground_drive.cpp
+new file mode 100644
+index 0000000000..da69980020
+--- /dev/null
++++ b/src/modules/ground_drive/ground_drive.cpp
+@@ -0,0 +1,946 @@
++/****************************************************************************
++ *
++ *   Copyright (c) 2026 PX4 Development Team. All rights reserved.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions
++ * are met:
++ *
++ * 1. Redistributions of source code must retain the above copyright
++ *    notice, this list of conditions and the following disclaimer.
++ * 2. Redistributions in binary form must reproduce the above copyright
++ *    notice, this list of conditions and the following disclaimer in
++ *    the documentation and/or other materials provided with the
++ *    distribution.
++ * 3. Neither the name PX4 nor the names of its contributors may be
++ *    used to endorse or promote products derived from this software
++ *    without specific prior written permission.
++ *
++ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
++ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
++ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
++ * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
++ * COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
++ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
++ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
++ * OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
++ * AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
++ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
++ * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
++ * POSSIBILITY OF SUCH DAMAGE.
++ *
++ ****************************************************************************/
++
++/**
++ * @file ground_drive.cpp
++ *
++ * 地面驱动（轮式）外部模式。
++ *
++ * 功能全貌：
++ *   · 50 Hz 调度；注册外部模式 GROUND_DRIVE（NAVIGATION_STATE_EXTERNAL1+N）
++ *   · 激活时发 setpoint_config{TYPE_DIRECT_ACTUATORS} → control_allocator 停发
++ *     → 本模块成为 actuator_motors 的唯一发布者
++ *   · arming check 门控：激活时看摆臂角度；未激活时只拦「armed + 空中」
++ *   · 摆臂角度限速外推器（不读真实角度，见 updateServoEstimate）
++ *   · 差速运动学 → 4 路归一化指令
++ *   · 补发 vehicle_thrust_setpoint{0}，喂饱 land detector（见 publishThrustZero）
++ *
++ * 详细设计、源码链路与 P4 排除的三个系统性陷阱：
++ *   《PX4地面驱动方案.md》第 4、12、13 章。
++ *
++ * ⚠️ 已知限制（不要再试软件调参，详见文档第 14 章）
++ *   四轮滑移转向原地搓转的力矩比是纯几何量：
++ *       驱动力矩 = 4·mu·N·(W/2) = 2·mu·N·W
++ *       擦阻力矩 = 4·mu·N·(L/2) = 2·mu·N·L
++ *       比值 = W/L = 0.165/0.21 = 0.79     ← mu 被约掉
++ *   ⇒ ω=0 是被静摩擦焊死的稳定解，结果呈双稳态（要么 0°，要么 70~150°）。
++ *   实测无效的手段：转向伴速、纵向抖动、GD_YAW_GAIN 1.5→5.0、
++ *   转向时 v_cmd 归零、借动量后收油 —— 成功率都在 17~40% 徘徊。
++ *   唯一有效：把轮距加宽到 ≥0.30 m（W/L≥1.43）→ 8/8。
++ */
++
++#include "ground_drive.hpp"
++
++#include <math.h>
++#include <string.h>
++
++#include <drivers/drv_hrt.h>
++#include <mathlib/math/Functions.hpp>
++
++ModuleBase::Descriptor GroundDrive::desc{task_spawn, custom_command, print_usage};
++
++namespace
++{
++//! 摆臂角度换算：SIM_GZ_SV_MINA1 = 0°, MAXA1 = 52°
++//!   ⇒ angle[deg] = 26 * (value + 1)，value ∈ [-1, 1]
++constexpr float kArmAnglePerUnit{26.f};
++
++//! 未注册时的注册请求重发周期
++constexpr hrt_abstime kRegisterRetryInterval{1_s};
++
++//! 激活期间 setpoint_config 的重发周期（防丢）
++constexpr hrt_abstime kSetpointConfigInterval{1_s};
++
++//! 9 路摆臂角功能号（对应 airframe 里 SIM_GZ_SV_FUNC1 = 301）
++constexpr float kServoFunction{301.f};
++
++//! 10 路模式切换功能号（对应 airframe 里 SIM_GZ_SV_FUNC2 = 302）
++constexpr float kModeSwitchFunction{302.f};
++
++//! 模式切换舵机角度：45° = 空中位，135° = 地面位
++constexpr float kModeAirDeg{45.f};
++constexpr float kModeGroundDeg{135.f};
++
++//! 消息队列一次最多消费的条数（不依赖各 msg 是否定义 ORB_QUEUE_LENGTH）
++constexpr int kMaxMsgPerCycle{4};
++
++//! 外推器单周期步长的下限/上限（秒）。
++//! 用真实周期而不是硬编码 20 ms —— nav_and_controllers 队列会被其他任务挤占，
++//! 周期一抖外推就偏，而这个角度直接喂 arming 门控（安全相关）。
++constexpr float kServoDtMin{0.01f};
++constexpr float kServoDtMax{0.10f};
++
++//! 摇杆死区（含等比放大：dz..1 → 0..1，满量程不损失）。
++//! 为什么需要：QGC 虚拟摇杆 / 实体摇杆回中后并不精确为 0。
++//! 实测回中时 thr = +0.12 → v = 0.144 m/s，而轮子在前有 64:1 减速器，
++//! 电机实际要转到 ~2200 rpm（桨同轴，声音很大），看上去就像“没动杆却在转了”。
++//! 死区内强制归零，死区外把剩余行程放大到 0..1，满杆仍然满权限。
++float applyStickDeadzone(float v, float dz)
++{
++	if (dz <= 0.f) {
++		return v;
++	}
++
++	const float a = fabsf(v);
++
++	if (a <= dz) {
++		return 0.f;
++	}
++
++	return copysignf((a - dz) / (1.f - dz), v);
++}
++} // namespace
++
++GroundDrive::GroundDrive() :
++	ModuleParams(nullptr),
++	ScheduledWorkItem(MODULE_NAME, px4::wq_configurations::nav_and_controllers),
++	_cycle_perf(perf_alloc(PC_ELAPSED, MODULE_NAME ": cycle"))
++{
++	updateParams();
++}
++
++GroundDrive::~GroundDrive()
++{
++	perf_free(_cycle_perf);
++}
++
++bool GroundDrive::init()
++{
++	// 50 Hz：与文档 §4.2 一致，外推器的 dt 也按 1/50 s 算
++	ScheduleOnInterval(20_ms);
++	return true;
++}
++
++void GroundDrive::Run()
++{
++	if (should_exit()) {
++		if (_reg_request_sent) {
++			unregisterExternalMode();
++		}
++
++		exit_and_cleanup(desc);
++		return;
++	}
++
++	perf_begin(_cycle_perf);
++
++	if (_parameter_update_sub.updated()) {
++		updateParams();
++	}
++
++	// ── ⓪ 刷新落地状态（arming check 门控要用）──
++	// 必须放在 ② arming check 之前：commander 随时可能来问。
++	vehicle_land_detected_s land{};
++
++	if (_vehicle_land_detected_sub.update(&land)) {
++		_landed = land.landed;
++	}
++
++	// ── ① 注册（未成功则 1 s 重试）──
++	if (!_registered) {
++		tryRegister();
++		handleRegistrationReply();
++	}
++
++	// ── ② arming check（commander 定期询问，必须每次回复）──
++	if (_arming_check_id >= 0) {
++		arming_check_request_s req;
++
++		for (int i = 0; i < kMaxMsgPerCycle; i++) {
++			if (!_arming_check_req_sub.update(&req)) {
++				break;
++			}
++
++			replyToArmingCheck(req.request_id);
++		}
++	}
++
++	// ── ③ 摆臂角度外推（每周期）──
++	updateServoEstimate();
++
++	// ── ④ 激活 / 退出检测 ──
++	vehicle_status_s vs;
++
++	if (_vehicle_status_sub.update(&vs)) {
++		_vehicle_status = vs;
++
++		const bool active = _registered && (_mode_id >= 0) && (vs.nav_state == (uint8_t)_mode_id);
++
++		if (active && !_mode_active) {
++			activateMode();
++
++		} else if (!active && _mode_active) {
++			deactivateMode();
++		}
++	}
++
++	const bool active_now = _registered && (_mode_id >= 0)
++				&& (_vehicle_status.nav_state == (uint8_t)_mode_id);
++
++	// ── 危险状态监测：模式切换在地面位，但当前不是本模式却已解锁 ──
++	// 这时 control_allocator 已在驱动 actuator_motors，而 AirGroundMux 又把桨
++	// 置 0、把所有输出送给了轮子 ⇒ **飞控的姿态混控直接推着车跑**，
++	// 而且推力只有正值（永远不反转）、姿态环持续配平（不动摇杆也在动）。
++	// 实测（2026-10-18）：操作者误点 QGC 的 Takeoff → 切 AUTO_TAKEOFF/Position
++	// → 就是这个状态，车在地面上自己跑，还以为是轮子坏了。
++	if ((_mode_angle_est_deg >= _param_mode_min.get()) && !_mode_active && active_now == false
++	    && (_vehicle_status.arming_state == vehicle_status_s::ARMING_STATE_ARMED)) {
++		if (hrt_elapsed_time(&_last_hazard_warn) > 2_s) {
++			PX4_WARN("ground_drive: 模式切换在地面位但飞控在驾驶！切回 GROUND_DRIVE 或先 Disarm");
++			_last_hazard_warn = hrt_absolute_time();
++		}
++	}
++
++	// ── 摆臂角仅作状态提示：模式在地面位但摆臂低于 GD_ARM_MIN_DEG 时，车轮可能未触地 ──
++	if (_mode_active && (_mode_angle_est_deg >= _param_mode_min.get())
++	    && (_servo_angle_est_deg < _param_arm_thresh.get())) {
++		if (hrt_elapsed_time(&_last_hazard_warn) > 2_s) {
++			PX4_WARN("ground_drive: 模式在地面位但摆臂仅 %.0f° < %.0f° — 车轮可能未触地",
++				 (double)_servo_angle_est_deg, (double)_param_arm_thresh.get());
++			_last_hazard_warn = hrt_absolute_time();
++		}
++	}
++
++	// ── ⑤ 激活时：周期重发 setpoint_config + 输出零 ──
++	if (_mode_active) {
++		const hrt_abstime now = hrt_absolute_time();
++
++		if ((_last_sp_config_pub == 0) || (hrt_elapsed_time(&_last_sp_config_pub) > kSetpointConfigInterval)) {
++			publishSetpointConfig();
++		}
++
++		checkSetpointConfigReply();
++
++		// ── ⑥ 补齐 land detector 缺失的输入（详见 publishThrustZero 注释）──
++		// 条件：本模式激活（_mode_active 已满足）+ 分配器已让位（_sp_confirmed）
++		//
++		// ⚠️ 千万不要加「已解锁」条件！实测教训（2026-10-17）：
++		//    加了 armed 后，解锁瞬间的第一帧里 armed=true 而 valid 还是 false，
++		//    land detector 抖动一下 → commander 打 "Takeoff detected" →
++		//    置 _have_taken_off_since_arming=true → COM_DISARM_LAND(2 s) 立刻自动上锁。
++		//    改成未解锁也发（未解锁时 landed 靠 !_armed 本来就是 true，无害），
++		//    就能保证 armed 变 true 的那一刻 valid 已经是 true，不抖。
++		if (_sp_confirmed) {
++			publishThrustZero(now);
++		}
++
++		manualDrive(now);
++	}
++
++	perf_end(_cycle_perf);
++}
++
++// ──────────────────────────────────────────────────────────── ① 注册
++
++void GroundDrive::tryRegister()
++{
++	if (_reg_request_sent && (hrt_elapsed_time(&_reg_request_time) < kRegisterRetryInterval)) {
++		return;
++	}
++
++	registerExternalMode();
++}
++
++void GroundDrive::registerExternalMode()
++{
++	register_ext_component_request_s req{};
++	req.timestamp = hrt_absolute_time();
++	strncpy(req.name, kModeName, sizeof(req.name) - 1);
++	req.request_id = kRequestId;
++	req.px4_ros2_api_version = register_ext_component_request_s::LATEST_PX4_ROS2_API_VERSION;
++	req.register_arming_check = true;            // ★ register_mode 依赖它
++	req.register_mode = true;
++	req.register_mode_executor = false;
++	req.enable_replace_internal_mode = false;    // 不替换任何内置模式
++	req.activate_mode_immediately = false;
++	req.not_user_selectable = false;             // 用户可以从 QGC 切进来
++	req.request_offboard_setpoints = false;
++
++	_reg_req_pub.publish(req);
++
++	_reg_request_sent = true;
++	_reg_request_time = req.timestamp;
++	_register_attempts++;
++
++	if (_register_attempts == 1) {
++		PX4_INFO("ground_drive: registration request sent (%s)", kModeName);
++
++	} else if ((_register_attempts % 10) == 0) {
++		PX4_WARN("ground_drive: still not registered (%u attempts)", (unsigned)_register_attempts);
++	}
++}
++
++void GroundDrive::handleRegistrationReply()
++{
++	register_ext_component_reply_s rep;
++
++	for (int i = 0; i < kMaxMsgPerCycle; i++) {
++		if (!_reg_reply_sub.update(&rep)) {
++			break;
++		}
++
++		if (rep.request_id != kRequestId) {
++			continue;
++		}
++
++		if (!rep.success) {
++			PX4_ERR("ground_drive: registration FAILED");
++			return;
++		}
++
++		_arming_check_id = rep.arming_check_id;
++		_mode_id = rep.mode_id;
++		_registered = true;
++
++		PX4_INFO("ground_drive: registered — mode_id=%d arming_check_id=%d",
++			 (int)_mode_id, (int)_arming_check_id);
++		PX4_INFO("ground_drive: enter with `commander mode ext%d` (QGC 里也能看到 %s)",
++			 (int)_mode_id - (int)vehicle_status_s::NAVIGATION_STATE_EXTERNAL1 + 1, kModeName);
++		return;
++	}
++}
++
++void GroundDrive::unregisterExternalMode()
++{
++	unregister_ext_component_s req{};
++	req.timestamp = hrt_absolute_time();
++	strncpy(req.name, kModeName, sizeof(req.name) - 1);
++	req.arming_check_id = _arming_check_id;
++	req.mode_id = _mode_id;
++	req.mode_executor_id = -1;
++
++	_unreg_pub.publish(req);
++
++	PX4_INFO("ground_drive: unregistered");
++}
++
++// ────────────────────────────────────────────── ② arming check 门控
++
++//! 模式切换门控开关（参数 GD_SERVO_GATE，默认 1 = 启用）。
++//!   · 激活中         ：10 路模式切换 >= GD_MODE_MIN_DEG 才允许 arm / 继续 run
++//!   · 未激活 + armed ：仅当【已落地】才放行 → 清 can_run 位 → 拒绝空中误切
++//!   · GD_SERVO_GATE=0：门控彻底失效（含 manualDrive 的输出门控点 ②）
++//!     —— 仅供模式切换舵机未接线时的台架调试，必须拆桨 + 整车架空！
++//!
++//! ⚠️ 门控只看 10 路模式切换，不看 9 路摆臂角；9 路只负责摆臂角度。
++bool GroundDrive::servoGateEnabled()
++{
++	return _param_servo_gate.get() != 0;
++}
++
++void GroundDrive::replyToArmingCheck(uint8_t request_id)
++{
++	arming_check_reply_s rep{};
++	rep.timestamp = hrt_absolute_time();
++	rep.request_id = request_id;
++	rep.registration_id = (uint8_t)_arming_check_id;
++	rep.health_component_index = arming_check_reply_s::HEALTH_COMPONENT_INDEX_NONE;
++	rep.num_events = 0;
++
++	// 三段式门控（文档 §4.4）：
++	//   激活中  ：10 路模式切换到位才允许 arm / 继续 run
++	//   未激活  ：模式切换到位 且（未解锁 或 已落地）才允许切入
++	//
++	// ⚠️ 门控只看 10 路模式切换，不看 9 路摆臂角。
++	//    9 路只负责把摆臂摆到工作角；模式切换由 10 路独立舵机完成。
++	//
++	// ⚠️ 绝不能写成 `_mode_active ? mode_ok : !armed`（旧版）：
++	//    `_mode_active` 本身就是「nav_state == mode_id」，于是“能不能进去”
++	//    依赖“已经在里面” —— 自指死锁。一旦有任何外部原因把模式顶掉
++	//    （failsafe → Return 等），就永远回不来。
++	//    详见 PX4 侧链路：externalChecks.cpp:163 置 mode_req_other →
++	//    modeCheck.cpp:182 clearCanRunBits → UserModeIntention.cpp:57 canRun()==false。
++	//
++	// 用 landed 而不是只用 armed 的原因：
++	//   armed 时“降落 → 切地面模式”是正常工作流，必须允许；
++	//   只有“armed 且在空中”才应该拒绝（防空中误切）。
++	//   未解锁时 landed 恒为 true（land detector 的 `!_armed ||` 分支）。
++	const bool armed = (_vehicle_status.arming_state == vehicle_status_s::ARMING_STATE_ARMED);
++	const bool mode_ok = (_mode_angle_est_deg >= _param_mode_min.get());
++
++	if (servoGateEnabled()) {
++		rep.can_arm_and_run = _mode_active ? mode_ok : (mode_ok && (!armed || _landed));
++
++	} else {
++		rep.can_arm_and_run = true;
++	}
++
++	// 地面模式不需要任何状态估算，只要摇杆
++	rep.mode_req_angular_velocity        = false;
++	rep.mode_req_attitude                = false;
++	rep.mode_req_local_alt               = false;
++	rep.mode_req_local_position          = false;
++	rep.mode_req_local_position_relaxed  = false;
++	rep.mode_req_global_position         = false;
++	rep.mode_req_global_position_relaxed = false;
++	rep.mode_req_mission                 = false;
++	rep.mode_req_home_position           = false;
++	rep.mode_req_prevent_arming          = false;
++	rep.mode_req_manual_control          = true;
++
++	_arming_check_reply_pub.publish(rep);
++}
++
++// ──────────────────────────────────────────────────────── ③ 模式激活
++
++void GroundDrive::activateMode()
++{
++	_mode_active = true;
++	_sp_confirmed = false;
++	_last_sp_config_pub = 0;
++
++	publishSetpointConfig();
++
++	PX4_INFO("ground_drive: mode ACTIVE — requesting TYPE_DIRECT_ACTUATORS");
++
++	// 防御性提示：正常路径下门控已经拦住“模式切换不到位就切进来”，
++	// 但 activate_mode_immediately / 强制切模式仍可能绕过。
++	// 模式切换未到 135° 时 AirGroundMux 仍把输出送给桨 —— 车不会动。
++	if (servoGateEnabled() && (_mode_angle_est_deg < _param_mode_min.get())) {
++		PX4_WARN("ground_drive: 模式切换仅 %.0f° < %.0f° — 仍为空中模式！先把 10 路切到 135°",
++			 (double)_mode_angle_est_deg, (double)_param_mode_min.get());
++	}
++}
++
++void GroundDrive::deactivateMode()
++{
++	_mode_active = false;
++	_sp_confirmed = false;
++	PX4_INFO("ground_drive: mode INACTIVE");
++
++	// 不需要手动恢复 setpoint type：
++	// ModeManagement::getSetpointType() 在模式切换时会把「被停用的模式」
++	// 的 current_setpoint_type 复位成 Trajectory → control_allocator 自动恢复发布。
++	PX4_INFO("ground_drive: mode INACTIVE — control_allocator 重新接管");
++}
++
++void GroundDrive::publishSetpointConfig()
++{
++	setpoint_config_s sc{};
++	sc.timestamp = hrt_absolute_time();
++	sc.source_id = (uint8_t)_mode_id;
++	sc.type = setpoint_config_s::TYPE_DIRECT_ACTUATORS;
++	sc.should_apply = true;
++	// 0 = 不启用 setpoint 超时；失联由 arming check 的「未响应」路径兜底。
++	// TODO(P6)：接上真实输出后改为 500 ms，让模块卡死时能触发 failsafe。
++	sc.timeout_ms = 0;
++
++	_setpoint_config_pub.publish(sc);
++
++	_last_sp_config_pub = sc.timestamp;
++}
++
++void GroundDrive::checkSetpointConfigReply()
++{
++	setpoint_config_reply_s rep;
++
++	for (int i = 0; i < kMaxMsgPerCycle; i++) {
++		if (!_sp_reply_sub.update(&rep)) {
++			break;
++		}
++
++		if (rep.source_id != (uint8_t)_mode_id) {
++			continue;
++		}
++
++		_sp_have_result = true;
++		_sp_last_result = rep.result;
++
++		// ⚠️ 必须双向同步：分配器一旦被别的模块抢回去，这里要立即失效。
++		//    否则会继续和 mc_rate_control / control_allocator 抢同一批话题
++		//    （uORB 无仲裁，最后写入者赢），正是本模块设计要避免的静默冲突。
++		const bool ok = (rep.result == setpoint_config_reply_s::RESULT_SUCCESS);
++
++		if (!ok) {
++			if (_sp_confirmed) {
++				PX4_ERR("ground_drive: setpoint_config 已失效 (result=%u) → 停止驱动",
++					(unsigned)rep.result);
++
++			} else {
++				PX4_ERR("ground_drive: setpoint_config REJECTED (result=%u)", (unsigned)rep.result);
++			}
++
++		} else if (!_sp_confirmed) {
++			PX4_INFO("ground_drive: setpoint_config accepted → control_allocator 应已停发");
++		}
++
++		_sp_confirmed = ok;
++	}
++}
++
++// ──────────────────────────────────────────── ④ 摆臂角 + 模式切换外推
++
++void GroundDrive::updateServoEstimate()
++{
++	// ── 抓舵机指令 ──
++	vehicle_command_s cmd;
++
++	for (int i = 0; i < kMaxMsgPerCycle; i++) {
++		if (!_vehicle_command_sub.update(&cmd)) {
++			break;
++		}
++
++		float new_value = NAN;
++		float new_mode_value = NAN;
++		hrt_abstime expire_us = 0;
++
++		if (cmd.command == vehicle_command_s::VEHICLE_CMD_DO_SET_ACTUATOR) {
++			// 187 有两种写法：
++			//   param7=0：param1..6 一次写 6 路（旧写法）
++			//   param7=1：只写 9 路摆臂角（param1）
++			//   param7=2：只写 10 路模式切换（param1）
++			const int idx = (int)lroundf(cmd.param7);
++
++			if (idx == 0) {
++				new_value = cmd.param1;
++				new_mode_value = cmd.param2;
++				expire_us = 0;
++
++			} else if (idx == 1) {
++				new_value = cmd.param1;
++				expire_us = 0;
++
++			} else if (idx == 2) {
++				new_mode_value = cmd.param1;
++				expire_us = 0;
++			}
++
++		} else if ((cmd.command == 310 /* MAV_CMD_ACTUATOR_TEST */)
++			   && (lroundf(cmd.param5) == (long)(1000.f + kServoFunction))) {
++			// 310：param1 = 值，param2 = **超时秒数**，param5 = 1000 + 功能号
++			new_value = cmd.param1;
++			// PX4 把超时钳到 3 s 上限；param2 <= 0 时也按上限算
++			const float tmo_s = (cmd.param2 > 0.f) ? fminf(cmd.param2, 3.f) : 3.f;
++			expire_us = (hrt_abstime)(tmo_s * 1e6f);
++
++		} else if ((cmd.command == 310)
++			   && (lroundf(cmd.param5) == (long)(1000.f + kModeSwitchFunction))) {
++			// 10 路模式切换：与 9 路同一套 310 语义
++			new_mode_value = cmd.param1;
++			const float tmo_s = (cmd.param2 > 0.f) ? fminf(cmd.param2, 3.f) : 3.f;
++			expire_us = (hrt_abstime)(tmo_s * 1e6f);
++		}
++
++		if (PX4_ISFINITE(new_value)) {
++			_servo_cmd_value = math::constrain(new_value, -1.f, 1.f);
++			_servo_cmd_time = hrt_absolute_time();
++			_servo_cmd_expire_us = expire_us;
++		}
++
++		if (PX4_ISFINITE(new_mode_value)) {
++			_mode_cmd_value = math::constrain(new_mode_value, -1.f, 1.f);
++			_mode_cmd_time = hrt_absolute_time();
++			_mode_cmd_expire_us = expire_us;
++		}
++	}
++
++	// ── 310 超时回落 ──
++	// 实测（2026-10-18）：QGC 的 Actuators 滑条用 310 驱动舵机，param2 = 1 s。
++	// 一旦离开 Vehicle Setup → Actuators 页面，QGC 就不再重发，**1 秒后**
++	// mixer_module 里的 _actuator_test 超时 → outputs 回落 DIS1 = 0 → 摆臂回 0°。
++	// 而本估计器如果只跟“收到的指令”走，就会一直以为摆臂还在 52° ——
++	// 于是门控放行、实际 mux 却在飞行位，表现为“进了地面模式但车不动”。
++	// 所以这里必须按同样的超时规则把估计值拉回 DIS(-1 → 0°)。
++	float effective_cmd = _servo_cmd_value;
++
++	if ((_servo_cmd_expire_us > 0)
++	    && (hrt_elapsed_time(&_servo_cmd_time) > (hrt_abstime)_servo_cmd_expire_us)) {
++		effective_cmd = -1.f;              // = SIM_GZ_SV_DIS1 → 0°
++	}
++
++	float effective_mode_cmd = _mode_cmd_value;
++
++	if ((_mode_cmd_expire_us > 0)
++	    && (hrt_elapsed_time(&_mode_cmd_time) > (hrt_abstime)_mode_cmd_expire_us)) {
++		effective_mode_cmd = -1.f;         // = SIM_GZ_SV_DIS2 → 45°（空中安全位）
++	}
++
++	// ── 一阶限速逼近（朝目标角匀速走，模拟舵机转速上限）──
++	const float target_deg = kArmAnglePerUnit * (effective_cmd + 1.f);
++	const float target_mode_deg = kModeAirDeg
++				      + 0.5f * (effective_mode_cmd + 1.f) * (kModeGroundDeg - kModeAirDeg);
++
++	// 用真实周期而不是硬编码 20 ms：nav_and_controllers 队列会被其他任务挤占，
++	// 周期一抖外推速率就错，而这个角度直接决定 arming 门控是否放行（安全相关）。
++	// clamp 到 [10, 100] ms，是为了防首帧/长阻塞把角度一步跳到位。
++	const hrt_abstime now = hrt_absolute_time();
++	float dt_s = kServoDtMin;
++
++	if (_last_servo_update != 0) {
++		dt_s = math::constrain(hrt_elapsed_time(&_last_servo_update) * 1e-6f,
++				       kServoDtMin, kServoDtMax);
++	}
++
++	_last_servo_update = now;
++
++	const float rate = _param_servo_rate.get();
++	const float step = (rate > 0.f ? rate : 1.f) * dt_s;        // deg per cycle
++
++	const float diff = target_deg - _servo_angle_est_deg;
++
++	if (fabsf(diff) <= step) {
++		_servo_angle_est_deg = target_deg;
++
++	} else {
++		_servo_angle_est_deg += copysignf(step, diff);
++	}
++
++	const float mode_diff = target_mode_deg - _mode_angle_est_deg;
++
++	if (fabsf(mode_diff) <= step) {
++		_mode_angle_est_deg = target_mode_deg;
++
++	} else {
++		_mode_angle_est_deg += copysignf(step, mode_diff);
++	}
++}
++
++// ──────────────────────────────────────────────────────────── ⑤ 输出
++
++void GroundDrive::manualDrive(hrt_abstime now)
++{
++	// ★ 门控点 ②：10 路模式切换没到位 → 输出 0（与门控点 ① 双保险）
++	//   GD_SERVO_GATE=0 时此门控也失效（台架调试），此时空中位也会驱动电机
++	if (servoGateEnabled() && (_mode_angle_est_deg < _param_mode_min.get())) {
++		_last_stick_valid = false;
++		publishZeroMotors(now);
++		return;
++	}
++
++	manual_control_setpoint_s mcs;
++
++	if (!_manual_control_sub.copy(&mcs) || !mcs.valid) {
++		_last_stick_valid = false;
++		publishZeroMotors(now);
++		return;
++	}
++
++	_last_stick_valid = true;
++
++	// ── 前后轴：throttle 与 pitch 饱和求和 ──
++	// QGC 虚拟摇杆是双摇杆，两个纵轴分属不同摇杆：
++	//     左摇杆上下 = MANUAL_CONTROL.z → manual_control_setpoint.throttle
++	//     右摇杆上下 = MANUAL_CONTROL.x → manual_control_setpoint.pitch
++	// 玩家习惯不统一（有人推左、有人推右），两个都接受。
++	//
++	// ⚠️ 早期用的是 `|pitch| > |throttle| ? pitch : throttle`（二选一），
++	//    实测问题是：两轴幅值接近时摇杆噪声会让 fwd 在两者间来回跳，
++	//    车身速度跟着抖（日志里 pitch −0.24~+1.00、throttle 0~0.10，交叉点明显）。
++	//    改成饱和求和：同向叠加、反向抵消、越界截断，连续且无跳变。
++	// 转向只认 roll（右摇杆左右）—— 已验证可用，不改。
++	// ★ 摇杆死区（GD_STICK_DZ）：回中偏置会让车自己爬行，必须先压掉
++	const float dz  = _param_stick_dz.get();
++	const float thr = applyStickDeadzone(mcs.throttle, dz);
++	const float pit = applyStickDeadzone(mcs.pitch, dz);
++	const float rol = applyStickDeadzone(mcs.roll, dz);
++
++	const float fwd = math::constrain(pit + thr, -1.f, 1.f);
++
++	// 摇杆 → 底盘线速度 / 角速度（轴权与官方 rover 一致：throttle 前进、roll 转向）
++	//   fwd：0 = 摇杆居中 = 停车，+1 前进，−1 后退
++	const float w_cmd = _param_yaw_gain.get() * rol;             // [rad/s]
++
++	// ★ 转弯自动降速（滑移转向的通用做法，GD_TURN_SLOW=0 则关闭）
++	//   本项目 W=0.165 m < L=0.21 m（W/L=0.79），强不足转向：满油门时纵向摩擦
++	//   把摩擦圆占满，差速根本使不上力。实测同差速下：
++	//       v=0.60 m/s → 0/5 能转；v=0.00 m/s → 2/10（最好）
++	//   ⇒ 默认 GD_TURN_SLOW=1.0，满舵时纵向指令**精确归零**，退化为纯原地搓转。
++	//   |roll|=0 时因子为 1，直线完全不受影响。
++	//   额外好处：运动中打满舵会带来一次巨大的差速阶跃，而日志显示 9 次
++	//   「开始转」的瞬间都有这种阶跃 —— 这是主动破锁的天然脉冲。
++	const float slow = _param_turn_slow.get();
++	float v_cmd = _param_max_speed.get() * fwd
++		      * (1.f - slow * fabsf(rol));                  // [m/s]
++
++	// 差速运动学：
++	//   a 侧 = joint3 / joint5（URDF y = −0.0825）→ control[0], control[2]
++	//   b 侧 = joint4 / joint6（URDF y = +0.0825）→ control[1], control[3]
++	const float half_track = 0.5f * _param_wheel_track.get();
++	const float v_a = v_cmd - w_cmd * half_track;
++	const float v_b = v_cmd + w_cmd * half_track;
++
++	// 轮线速 → 电机轴角速度 → 归一化
++	//   ctrl = v * (齿轮比 / (轮半径 * max_omega))
++	const float gear = _param_gear_ratio.get();
++	const float radius = _param_wheel_r.get();
++	const float max_omega = _param_motor_max.get();
++
++	float ctrl_a = 0.f;
++	float ctrl_b = 0.f;
++
++	if ((radius > 0.f) && (max_omega > 0.f)) {
++		const float k = gear / (radius * max_omega);   // [1/(m/s)]
++		ctrl_a = v_a * k;
++		ctrl_b = v_b * k;
++
++		// ★ 饱和时【保转向】（照抄 DifferentialActControl 的思路）：
++		//   任一侧超限就整体等比缩放，保持 ctrl_a : ctrl_b 比例不变
++		//   ⇒ 转弯半径不变，只牺牲绝对车速。
++		//   反例（旧版）：两侧各自 clamp → 外侧被削、内侧不动，
++		//   表现为「满油门时弯转不动、车往外甩」。
++		//   注意这里必须是「除同一个数」而不是分别 clamp。
++		const float peak = fmaxf(fabsf(ctrl_a), fabsf(ctrl_b));
++
++		if (peak > 1.f) {
++			ctrl_a /= peak;
++			ctrl_b /= peak;
++		}
++	}
++
++	_last_v_cmd = v_cmd;
++	_last_w_cmd = w_cmd;
++	_last_ctrl_a = ctrl_a;
++	_last_ctrl_b = ctrl_b;
++
++	publishMotors(now, ctrl_a, ctrl_b);
++}
++
++void GroundDrive::publishZeroMotors(hrt_abstime now)
++{
++	_last_v_cmd = 0.f;
++	_last_w_cmd = 0.f;
++	_last_ctrl_a = 0.f;
++	_last_ctrl_b = 0.f;
++
++	publishMotors(now, 0.f, 0.f);
++}
++
++void GroundDrive::publishMotors(hrt_abstime now, float ctrl_a, float ctrl_b)
++{
++	actuator_motors_s am{};
++	am.timestamp = now;
++	am.timestamp_sample = now;
++	am.reversible_flags = (uint16_t)_param_r_rev.get();
++
++	// 只驱动前 4 路（SIM_GZ_EC_FUNC1..4），其余置 NaN = 未使用。
++	// 同一个电机通道在摆臂 52° 时由 Gazebo 侧 AirGroundMux 转给轮子。
++	am.control[0] = ctrl_a;   // 电机1：joint3（桨）/ joint7（轮）
++	am.control[1] = ctrl_b;   // 电机2：joint4（桨）/ joint8（轮）
++	am.control[2] = ctrl_a;   // 电机3：joint5（桨）/ joint9（轮）
++	am.control[3] = ctrl_b;   // 电机4：joint6（桨）/ joint10（轮）
++
++	for (int i = 4; i < actuator_motors_s::NUM_CONTROLS; i++) {
++		am.control[i] = NAN;
++	}
++
++	_actuator_motors_pub.publish(am);
++}
++
++// ───────────────────────────── ⑥ land detector 输入补偿
++
++/**
++ * 发布一条「我请求 0 推力」的 vehicle_thrust_setpoint。
++ *
++ * 为什么需要它（2026-10-17 P4 排障结论）
++ * ------------------------------------
++ * 本模块用 TYPE_DIRECT_ACTUATORS，getControlMode() 什么都不启用：
++ *     flag_control_rates_enabled   = false
++ *     flag_control_allocation_enabled = false
++ * ⇒ mc_rate_control 不运行（MulticopterRateControl.cpp:189 门控）
++ * ⇒ vehicle_thrust_setpoint 从来没人发布
++ *
++ * 而 MulticopterLandDetector 判定「落地」的第一级判据就依赖这条消息：
++ *     _vehicle_thrust_setpoint_valid = (最后接收时间 < 1 s)   // :221
++ *     _has_low_throttle  = valid && (throttle <= 阈值)          // :232
++ *     ground_contact     = _has_low_throttle                    // :233
++ *     maybe_landed       = minimum_thrust_now && ...            // :285/307
++ *     landed             = !_armed || maybe_landed              // :313
++ *
++ * 话题从未发布 ⇒ valid=false（时间戳停在初值 0）⇒ ground_contact=false
++ *            ⇒ maybe_landed=false ⇒ **armed 时 landed 永远为 false**
++ *
++ * 后果实测：一解锁 commander 就报 "Takeoff detected"、普通 disarm 被拒
++ *          （"Disarming denied: not landed"）、所有 failsafe 按「飞行中」处理
++ *          （日志里真的出现了 "RTL: start return at 13 m"）。
++ *
++ * 这里补发 throttle=0，把 land detector 缺的那个输入补回去。
++ * 语义上也如实：地面模式确实不需要任何螺旋桨推力。
++ *
++ * ⚠️ 四条铁律（破坏任意一条都会引入新问题，排查记录见文档）
++ * ----------------------------------------------------------------
++ * 1) 只在 _mode_active 时发布。
++ *    mc_rate_control 的发布门控是 flag_control_rates_enabled，恰好与本模式
++ *    互斥；但 uORB 没有仲裁（最后写入者赢），越界发布就会和它抢同一个话题。
++ * 2) xyz 必须填 0，绝不能填 NaN。
++ *    NaN 会被 control_allocator 解释成「停止该轴所有电机」
++ *    （ActuatorEffectiveness::stopMotorsBasedOnThrustSetpoint，:230）。
++ * 3) 只在 _sp_confirmed 之后发布，避免在分配器还没让位时插入假指令。
++ * 4) 【不能】只在已解锁时发布 —— 必须未解锁也发。
++ *    否则解锁瞬间的第一帧 armed=true、valid=false，land detector 抖一下
++ *    就会触发 "Takeoff detected" → _have_taken_off_since_arming=true →
++ *    COM_DISARM_LAND(2 s) 立刻把车自动上锁（实测过）。
++ *    未解锁时多发一条是无害的：landed 靠 !_armed 本来就是 true。
++ *
++ * ⚠️ 已排查的副作用（均为无风险）：
++ *   · control_allocator：只在 _publish_controls=false 时不写输出；xyz=0 也不会
++ *     触发停轴（只有 NaN 才会）
++ *   · mc_hover_thrust_estimator：要求 _in_air，而 _in_air 只在
++ *     dist_bottom > 1 m 时才置 true ⇒ 地面跑时 EKF 不运行，不会污染 MPC_THR_HOVER
++ *   · vehicle_magnetometer / VFR_HUD：收到 0 与「收不到」在本场景下等价
++ */
++void GroundDrive::publishThrustZero(hrt_abstime now)
++{
++	vehicle_thrust_setpoint_s sp{};
++	sp.timestamp = now;
++	sp.timestamp_sample = now;
++
++	// 机体 Z 轴向下为正，所以「不要推力」写 0。
++	// 显式写 0 而不是 NAN，见铁律 2。
++	sp.xyz[0] = 0.f;
++	sp.xyz[1] = 0.f;
++	sp.xyz[2] = 0.f;
++
++	_vehicle_thrust_sp_pub.publish(sp);
++	_thrust_sp_count++;
++}
++
++// ────────────────────────────────────────────────────────── 模块样板
++
++int GroundDrive::print_status()
++{
++	PX4_INFO("registered      : %s", _registered ? "yes" : "no");
++
++	if (_registered) {
++		PX4_INFO("mode_id         : %d  (`commander mode ext%d`)",
++			 (int)_mode_id, (int)_mode_id - (int)vehicle_status_s::NAVIGATION_STATE_EXTERNAL1 + 1);
++		PX4_INFO("arming_check_id : %d", (int)_arming_check_id);
++		PX4_INFO("setpoint_config : current=%s  last_reply=%s",
++			 _sp_confirmed ? "confirmed" : "none",
++			 !_sp_have_result ? "n/a"
++			 : (_sp_last_result == setpoint_config_reply_s::RESULT_SUCCESS ? "SUCCESS" : "FAIL"));
++	}
++
++	PX4_INFO("mode active     : %s", _mode_active ? "yes" : "no");
++	PX4_INFO("mode gate       : %s (mode >= %.1f deg)",
++		 servoGateEnabled() ? "ENABLED" : "DISABLED (bench debug!)", (double)_param_mode_min.get());
++	PX4_INFO("mode switch     : cmd %+.3f  →  est %.1f deg",
++		 (double)_mode_cmd_value, (double)_mode_angle_est_deg);
++	PX4_INFO("arm servo       : cmd %+.3f  →  est %.1f deg (rate %.1f deg/s)",
++		 (double)_servo_cmd_value, (double)_servo_angle_est_deg, (double)_param_servo_rate.get());
++
++	// 原始摇杆四轴：排查「某个方向没反应」时先看这里，别看下面算出来的值
++	{
++		manual_control_setpoint_s mcs{};
++
++		if (_manual_control_sub.copy(&mcs)) {
++			PX4_INFO("sticks raw      : thr=%+.2f  pitch=%+.2f  roll=%+.2f  yaw=%+.2f  valid=%s",
++				 (double)mcs.throttle, (double)mcs.pitch, (double)mcs.roll, (double)mcs.yaw,
++				 mcs.valid ? "yes" : "no");
++
++			const float dzv = _param_stick_dz.get();
++			PX4_INFO("sticks dz       : thr=%+.3f  pitch=%+.3f  roll=%+.3f   (GD_STICK_DZ=%.2f)",
++				 (double)applyStickDeadzone(mcs.throttle, dzv),
++				 (double)applyStickDeadzone(mcs.pitch, dzv),
++				 (double)applyStickDeadzone(mcs.roll, dzv), (double)dzv);
++		}
++	}
++
++	PX4_INFO("drive           : stick_valid=%s  v=%.3f m/s  w=%.3f rad/s",
++		 _last_stick_valid ? "yes" : "no", (double)_last_v_cmd, (double)_last_w_cmd);
++
++	// 标定参数全量打印：现场排查「车不走 / 转不动」时先看这里 ——
++	// 十有八九是 parameters.bson 里的旧值把 airframe/module.yaml 的默认值顶掉了。
++	PX4_INFO("calib           : v_max=%.2f m/s  yaw_gain=%.2f rad/s  turn_slow=%.2f",
++		 (double)_param_max_speed.get(), (double)_param_yaw_gain.get(),
++		 (double)_param_turn_slow.get());
++	PX4_INFO("calib           : omega_max=%.0f  gear=%.1f  R=%.4f m  track=%.3f m",
++		 (double)_param_motor_max.get(), (double)_param_gear_ratio.get(),
++		 (double)_param_wheel_r.get(), (double)_param_wheel_track.get());
++	PX4_INFO("ctrl[a,b]       : %+.4f / %+.4f   (a→control[0,2]  b→control[1,3])",
++		 (double)_last_ctrl_a, (double)_last_ctrl_b);
++	PX4_INFO("vehicle         : arming_state=%u nav_state=%u",
++		 (unsigned)_vehicle_status.arming_state, (unsigned)_vehicle_status.nav_state);
++	PX4_INFO("thrust sp       : %llu 条已发（land detector 输入补偿）",
++		 (unsigned long long)_thrust_sp_count);
++	perf_print_counter(_cycle_perf);
++
++	return 0;
++}
++
++int GroundDrive::task_spawn(int argc, char *argv[])
++{
++	GroundDrive *instance = new GroundDrive();
++
++	if (instance) {
++		desc.object.store(instance);
++		desc.task_id = task_id_is_work_queue;
++
++		if (instance->init()) {
++			return PX4_OK;
++		}
++
++	} else {
++		PX4_ERR("alloc failed");
++	}
++
++	delete instance;
++	desc.object.store(nullptr);
++	desc.task_id = -1;
++
++	return PX4_ERROR;
++}
++
++int GroundDrive::custom_command(int argc, char *argv[])
++{
++	return print_usage("unknown command");
++}
++
++int GroundDrive::print_usage(const char *reason)
++{
++	if (reason) {
++		PX4_WARN("%s\n", reason);
++	}
++
++	PRINT_MODULE_DESCRIPTION(
++		R"DESCR_STR(
++### Description
++Ground drive (wheeled) external mode.
++
++Registers the external mode GROUND_DRIVE. While active it publishes
++setpoint_config{TYPE_DIRECT_ACTUATORS}, which makes the control allocator
++relinquish actuator_motors, so this module becomes the only writer.
++
++Fly mode is untouched: while inactive the module never touches actuator_motors.
++)DESCR_STR");
++
++	PRINT_MODULE_USAGE_NAME("ground_drive", "controller");
++	PRINT_MODULE_USAGE_COMMAND("start");
++	PRINT_MODULE_USAGE_DEFAULT_COMMANDS();
++
++	return 0;
++}
++
++extern "C" __EXPORT int ground_drive_main(int argc, char *argv[])
++{
++	return ModuleBase::main(GroundDrive::desc, argc, argv);
++}
+diff --git a/src/modules/ground_drive/ground_drive.hpp b/src/modules/ground_drive/ground_drive.hpp
+new file mode 100644
+index 0000000000..c5e4330826
+--- /dev/null
++++ b/src/modules/ground_drive/ground_drive.hpp
+@@ -0,0 +1,220 @@
++/****************************************************************************
++ *
++ *   Copyright (c) 2026 PX4 Development Team. All rights reserved.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions
++ * are met:
++ *
++ * 1. Redistributions of source code must retain the above copyright
++ *    notice, this list of conditions and the following disclaimer.
++ * 2. Redistributions in binary form must reproduce the above copyright
++ *    notice, this list of conditions and the following disclaimer in
++ *    the documentation and/or other materials provided with the
++ *    distribution.
++ * 3. Neither the name PX4 nor the names of its contributors may be
++ *    used to endorse or promote products derived from this software
++ *    without specific prior written permission.
++ *
++ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
++ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
++ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
++ * FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
++ * COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
++ * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
++ * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
++ * OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
++ * AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
++ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
++ * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
++ * POSSIBILITY OF SUCH DAMAGE.
++ *
++ ****************************************************************************/
++
++/**
++ * @file ground_drive.hpp
++ *
++ * 地面驱动（轮式）外部模式。
++ *
++ * 架构（详见工作区文档 `PX4地面驱动方案.md`）：
++ *   本模块注册一个 PX4 外部模式（NAVIGATION_STATE_EXTERNAL1+N），
++ *   激活时向 commander 发布 setpoint_config{TYPE_DIRECT_ACTUATORS}，
++ *   使 `flag_control_allocation_enabled = false`
++ *   → control_allocator 在 publish_actuator_controls() 早退、不再发布
++ *   → 本模块成为 actuator_motors 的唯一发布者。
++ *
++ * 飞行模式下本模块常驻但不写电机（`_mode_active == false`）。
++ */
++
++#pragma once
++
++#include <perf/perf_counter.h>
++#include <px4_platform_common/defines.h>
++#include <px4_platform_common/log.h>
++#include <px4_platform_common/module.h>
++#include <px4_platform_common/module_params.h>
++#include <px4_platform_common/px4_work_queue/ScheduledWorkItem.hpp>
++
++#include <uORB/Publication.hpp>
++#include <uORB/Subscription.hpp>
++#include <uORB/SubscriptionInterval.hpp>
++
++#include <uORB/topics/actuator_motors.h>
++#include <uORB/topics/arming_check_reply.h>
++#include <uORB/topics/arming_check_request.h>
++#include <uORB/topics/manual_control_setpoint.h>
++#include <uORB/topics/parameter_update.h>
++#include <uORB/topics/register_ext_component_reply.h>
++#include <uORB/topics/register_ext_component_request.h>
++#include <uORB/topics/setpoint_config.h>
++#include <uORB/topics/setpoint_config_reply.h>
++#include <uORB/topics/unregister_ext_component.h>
++#include <uORB/topics/vehicle_command.h>
++#include <uORB/topics/vehicle_land_detected.h>
++#include <uORB/topics/vehicle_status.h>
++#include <uORB/topics/vehicle_thrust_setpoint.h>
++
++using namespace time_literals;
++
++class GroundDrive : public ModuleBase, public ModuleParams, public px4::ScheduledWorkItem
++{
++public:
++	GroundDrive();
++	~GroundDrive() override;
++
++	static Descriptor desc;
++
++	/** @see ModuleBase */
++	static int task_spawn(int argc, char *argv[]);
++
++	/** @see ModuleBase */
++	static int custom_command(int argc, char *argv[]);
++
++	/** @see ModuleBase */
++	static int print_usage(const char *reason = nullptr);
++
++	/** @see ModuleBase */
++	int print_status() override;
++
++	bool init();
++
++private:
++	void Run() override;
++
++	// ── ① 注册 / 注销 ─────────────────────────────────────────
++	void tryRegister();                 //!< 未注册时按 1 s 周期重发注册请求
++	void registerExternalMode();        //!< 发 register_ext_component_request
++	void handleRegistrationReply();     //!< 收 register_ext_component_reply
++	void unregisterExternalMode();      //!< 退出时发 unregister_ext_component
++
++	// ── ② arming check（门控点 ①）────────────────────────────
++	void replyToArmingCheck(uint8_t request_id);
++	//! GD_SERVO_GATE 是否为 1。false = 门控彻底失效（仅台架调试）
++	bool servoGateEnabled();
++
++	// ── ③ 模式激活 ────────────────────────────────────────────
++	void activateMode();
++	void deactivateMode();
++	void publishSetpointConfig();       //!< 发 setpoint_config{TYPE_DIRECT_ACTUATORS}
++	void checkSetpointConfigReply();    //!< 读 setpoint_config_reply 并打印结果
++
++	// ── ④ 摆臂角度外推器 ──────────────────────────────────────
++	void updateServoEstimate();
++
++	// ── ⑤ 输出 ───────────────────────────────────────────────
++	void manualDrive(hrt_abstime now);
++	void publishZeroMotors(hrt_abstime now);
++	void publishMotors(hrt_abstime now, float ctrl_a, float ctrl_b);
++
++	// ── ⑥ land detector 输入补偿 ─────────────────────────────
++	//! 补发 vehicle_thrust_setpoint{0}，让 MulticopterLandDetector 能正常判“落地”。
++	//! 详见 .cpp 里的实现注释（为什么必须有它，以及四条铁律）。
++	void publishThrustZero(hrt_abstime now);
++
++	static constexpr uint64_t kRequestId{0x67726F756E645F31ULL};   //!< 'ground_1'
++	static constexpr char kModeName[]{"GROUND_DRIVE"};
++
++	// 注册状态
++	bool         _reg_request_sent{false};
++	bool         _registered{false};
++	int8_t       _arming_check_id{-1};
++	int8_t       _mode_id{-1};
++	uint32_t     _register_attempts{0};
++	hrt_abstime  _reg_request_time{0};
++
++	// 模式状态
++	bool         _mode_active{false};
++	bool         _sp_confirmed{false};      //!< 当前是否已确认（激活期间有效）
++	bool         _sp_have_result{false};    //!< 是否收到过 setpoint_config_reply
++	uint8_t      _sp_last_result{0};        //!< 最近一次 reply 的 result
++	hrt_abstime  _last_sp_config_pub{0};
++	//! 危险状态报警限速（“摆臂在轮位但飞控在驾驶”，见 Run()）
++	hrt_abstime  _last_hazard_warn{0};
++
++	// 状态缓存
++	vehicle_status_s _vehicle_status{};     //!< Run() 内刷新，供 arming check 读 armed
++	bool         _landed{true};             //!< vehicle_land_detected.landed 缓存（门控用）
++
++	// 摆臂角度外推
++	float        _servo_cmd_value{-1.f};    //!< 最近一次 9 路摆臂角指令 [-1, 1] → 0°
++	float        _servo_angle_est_deg{0.f};
++	//! 最近一次 9 路摆臂角指令的时间
++	hrt_abstime  _servo_cmd_time{0};
++	//! 该指令的有效期（us）。0 = 无超时（187 锁存）；310 由 param2 指定，最长 3 s
++	uint32_t     _servo_cmd_expire_us{0};
++
++	// 10 路模式切换外推
++	float        _mode_cmd_value{-1.f};    //!< 最近一次模式切换指令 [-1, 1] → 45°
++	float        _mode_angle_est_deg{45.f};//!< 45° = 空中位，135° = 地面位
++	//! 最近一次模式切换指令的时间
++	hrt_abstime  _mode_cmd_time{0};
++	//! 该指令的有效期（us）。0 = 无超时（187 锁存）；310 由 param2 指定，最长 3 s
++	uint32_t     _mode_cmd_expire_us{0};
++
++	//! 上一次执行外推的时刻（用于算真实 dt，而不是硬编码 20 ms）
++	hrt_abstime  _last_servo_update{0};
++
++	// 上一次的控制量（仅用于 status 显示 / 调试）
++	float        _last_v_cmd{0.f};
++	float        _last_w_cmd{0.f};
++	float        _last_ctrl_a{0.f};
++	float        _last_ctrl_b{0.f};
++	bool         _last_stick_valid{false};
++	uint64_t     _thrust_sp_count{0};       //!< 发了多少条补偿的 thrust setpoint（仅调试用）
++
++	perf_counter_t _cycle_perf{nullptr};
++
++	// Subscriptions
++	uORB::SubscriptionInterval _parameter_update_sub{ORB_ID(parameter_update), 1_s};
++	uORB::Subscription _reg_reply_sub{ORB_ID(register_ext_component_reply)};
++	uORB::Subscription _arming_check_req_sub{ORB_ID(arming_check_request)};
++	uORB::Subscription _vehicle_status_sub{ORB_ID(vehicle_status)};
++	uORB::Subscription _vehicle_land_detected_sub{ORB_ID(vehicle_land_detected)};
++	uORB::Subscription _vehicle_command_sub{ORB_ID(vehicle_command)};
++	uORB::Subscription _manual_control_sub{ORB_ID(manual_control_setpoint)};
++	uORB::Subscription _sp_reply_sub{ORB_ID(setpoint_config_reply)};
++
++	// Publications
++	uORB::Publication<register_ext_component_request_s> _reg_req_pub{ORB_ID(register_ext_component_request)};
++	uORB::Publication<unregister_ext_component_s>       _unreg_pub{ORB_ID(unregister_ext_component)};
++	uORB::Publication<arming_check_reply_s>             _arming_check_reply_pub{ORB_ID(arming_check_reply)};
++	uORB::Publication<setpoint_config_s>                _setpoint_config_pub{ORB_ID(setpoint_config)};
++	uORB::Publication<actuator_motors_s>                _actuator_motors_pub{ORB_ID(actuator_motors)};
++	uORB::Publication<vehicle_thrust_setpoint_s>       _vehicle_thrust_sp_pub{ORB_ID(vehicle_thrust_setpoint)};
++
++	DEFINE_PARAMETERS(
++		(ParamFloat<px4::params::GD_SERVO_RATE>)   _param_servo_rate,
++		(ParamFloat<px4::params::GD_STICK_DZ>)     _param_stick_dz,    // 摇杆死区
++		(ParamFloat<px4::params::GD_ARM_MIN_DEG>)  _param_arm_thresh,  // 仅状态提示，不参与门控
++		(ParamFloat<px4::params::GD_MODE_MIN_DEG>) _param_mode_min,    // 10 路模式切换门限
++		(ParamInt<px4::params::GD_SERVO_GATE>)     _param_servo_gate,  // 门控总开关（0=台架禁用）
++		(ParamFloat<px4::params::GD_MAX_SPEED>)    _param_max_speed,
++		(ParamFloat<px4::params::GD_WHEEL_TRACK>)  _param_wheel_track,
++		(ParamFloat<px4::params::GD_YAW_GAIN>)     _param_yaw_gain,
++		(ParamFloat<px4::params::GD_MAX_OMEGA>)    _param_motor_max,
++		(ParamFloat<px4::params::GD_GEAR_RATIO>)   _param_gear_ratio,   // 64:1 行星减速器
++		(ParamFloat<px4::params::GD_WHEEL_R>)      _param_wheel_r,      // 轮半径 [m]
++		(ParamFloat<px4::params::GD_TURN_SLOW>)    _param_turn_slow,    // 转弯降速系数
++		(ParamInt<px4::params::CA_R_REV>)          _param_r_rev
++	)
++};
+diff --git a/src/modules/ground_drive/module.yaml b/src/modules/ground_drive/module.yaml
+new file mode 100644
+index 0000000000..c0ed090751
+--- /dev/null
++++ b/src/modules/ground_drive/module.yaml
+@@ -0,0 +1,223 @@
++module_name: ground_drive
++parameters:
++  - group: Ground Drive
++    definitions:
++      GD_SERVO_RATE:
++        description:
++          short: Assumed servo angular rate for arm angle extrapolation
++          long: |
++            The arm angle is estimated by time-based extrapolation (there is no
++            angle sensor). This is the assumed angular rate used by the
++            estimator. Set it conservatively (slower than reality) so that the
++            estimate lags the real arm and the gate stays conservative.
++        type: float
++        unit: deg/s
++        decimal: 1
++        min: 5
++        max: 200
++        increment: 1
++        default: 40
++
++      GD_STICK_DZ:
++        description:
++          short: Stick deadzone for the ground drive mode
++          long: |
++            Normalised deadzone applied to the pitch, throttle and roll sticks
++            before they are turned into speed / yaw-rate commands.
++
++            Real sticks and the QGC virtual joystick do not return exactly to
++            zero: a resting offset of +0.12 on the throttle axis was measured,
++            which already produces 0.144 m/s of creep and a high motor RPM
++            (the wheel is behind a 64:1 reducer, so the motor spins 64x faster
++            than the wheel).
++
++            Inside the deadzone the command is forced to exactly zero; outside
++            it the remaining range is rescaled to 0..1 so full deflection still
++            gives full authority.
++
++            0 = disabled.
++            Note this is applied in addition to DSHOT_3D_DEAD_L/H, which forms
++            the ESC-side deadband around the neutral DShot value.
++            Keep this the PRIMARY creep suppressor, and keep DSHOT_3D_DEAD_L/H
++            narrow (+-0.015). The pure-pivot command is only control = +-0.0825
++            (w_cmd = GD_YAW_GAIN * roll, dv = w_cmd * W/2, control = dv * gear /
++            (r * max_omega)); an ESC deadband wider than that silently kills all
++            steering while forward/backward keeps working.
++        type: float
++        unit: norm
++        decimal: 2
++        min: 0
++        max: 0.5
++        increment: 0.01
++        default: 0.15
++
++      GD_ARM_MIN_DEG:
++        description:
++          short: Arm angle used for status warnings only
++          long: |
++            The 9th output controls the arm angle (0 deg = propeller position,
++            52 deg = wheel position). This parameter is now used only for
++            status / warning messages; it does NOT gate the ground drive mode.
++            The mode gate is GD_MODE_MIN_DEG, driven by the 10th output.
++        type: float
++        unit: deg
++        decimal: 1
++        min: 0
++        max: 55
++        increment: 0.5
++        default: 30
++
++      GD_MODE_MIN_DEG:
++        description:
++          short: Minimum mode-switch angle to enable ground drive
++          long: |
++            The 10th output controls the flight/ground mode switch:
++              45 deg  = air mode (propellers engaged)
++              135 deg = ground mode (wheels engaged)
++            Ground drive is allowed only after the estimated mode-switch angle
++            reaches this threshold. The estimator is open-loop (no feedback),
++            using GD_SERVO_RATE and the commanded 10th-channel value.
++        type: float
++        unit: deg
++        decimal: 1
++        min: 45
++        max: 180
++        increment: 0.5
++        default: 135
++
++      GD_SERVO_GATE:
++        description:
++          short: Enable the mode-switch gate
++          long: |
++            Master switch for both mode-switch gates:
++              - arming_check_reply.can_arm_and_run (mode entry / arming)
++              - manualDrive() output gate (motors forced to 0)
++
++            When enabled (default) the 10th output (mode switch) must reach
++            GD_MODE_MIN_DEG before the ground drive mode can be armed, entered,
++            or drive the wheel motors. The 9th output (arm angle) is not used
++            for gating.
++
++            Set this to 0 ONLY for bench debugging while the mode-switch servo
++            is not wired or not calibrated: the gate is then ignored completely
++            and the wheel motors are driven even in air mode. ALWAYS remove the
++            propellers and lift the vehicle off the ground. Restore to 1 before
++            any real operation.
++        type: enum
++        values:
++          0: Disabled (bench debug only)
++          1: Enabled
++        default: 1
++
++      GD_MAX_SPEED:
++        description:
++          short: Maximum ground speed at full throttle
++          long: |
++            Limited by GD_MAX_OMEGA / GD_GEAR_RATIO * GD_WHEEL_R once the
++            normalised command saturates at 1.0.
++        type: float
++        unit: m/s
++        decimal: 2
++        min: 0.1
++        max: 5.0
++        increment: 0.05
++        default: 1.2
++
++      GD_WHEEL_TRACK:
++        description:
++          short: Distance between left and right wheels
++          long: |
++            Distance between the two arm axes. Measured from robot.urdf:
++            joint3/joint5 are at y = -0.0825, joint4/joint6 at y = +0.0825,
++            so the default is 0.165 m.
++        type: float
++        unit: m
++        decimal: 3
++        min: 0.05
++        max: 2.0
++        increment: 0.005
++        default: 0.165
++
++      GD_YAW_GAIN:
++        description:
++          short: Steering stick to yaw rate gain
++          long: |
++            Steering follows the official rover convention: the roll stick
++            (right stick horizontal). Verify the QGC joystick mapping before use.
++        type: float
++        decimal: 1
++        min: 0.1
++        max: 5.0
++        increment: 0.1
++        default: 1.5
++
++      GD_MAX_OMEGA:
++        description:
++          short: Motor shaft angular velocity at full actuator output
++          long: |
++            Normalisation constant for wheel commands: control = v * gear /
++            (wheel_r * GD_MAX_OMEGA).
++
++            MUST match <wheel_max_omega> in the Gazebo AirGroundMux plugin,
++            otherwise commanded speed != actual speed. The value is higher than
++            the propeller's <motor_max_omega> on purpose: props and wheels share
++            the same motor channel, and the prop omega_max is locked by the
++            thrust calibration (T = kT*w^2), so the wheel side gets its own
++            scale. Wheel top speed = GD_MAX_OMEGA / gear * wheel_r.
++        type: float
++        unit: rad/s
++        decimal: 0
++        min: 10
++        max: 10000
++        increment: 1
++        default: 2400
++
++      GD_GEAR_RATIO:
++        description:
++          short: Gear ratio between motor and wheel
++          long: |
++            Planetary reducer on the ground side. Wheel angular velocity =
++            motor angular velocity / gear ratio.
++        type: float
++        decimal: 1
++        min: 1
++        max: 200
++        increment: 1
++        default: 64
++
++      GD_WHEEL_R:
++        description:
++          short: Wheel radius
++          long: |
++            Used to convert wheel linear speed to motor shaft angular velocity.
++            Measured from robot.urdf (collision cylinder radius = 0.040 m).
++        type: float
++        unit: m
++        decimal: 4
++        min: 0.005
++        max: 0.5
++        increment: 0.001
++        default: 0.04
++
++      GD_TURN_SLOW:
++        description:
++          short: Throttle cut at full steering
++          long: |
++            Skid-steer needs differential authority to turn. With W=0.165 m and
++            L=0.21 m (W/L = 0.79) this frame loses more yaw moment to lateral
++            scrub than the wheels can generate, so longitudinal speed is scaled
++            by (1 - GD_TURN_SLOW * |roll|).
++
++            1.0 = full steering zeroes the longitudinal command completely,
++                  i.e. pure pivot. Measured 2026-10-18 (3 s, |dyaw| > 10 deg):
++                    v = 0.60 m/s -> 0/5 turn
++                    v = 0.45 m/s -> 2/10
++                    v = 0.00 m/s -> 2/10 (best)
++            0.0 = disabled (keep full speed while steering).
++            Straight driving is unaffected (|roll| = 0 -> factor 1).
++        type: float
++        decimal: 2
++        min: 0.0
++        max: 1.0
++        increment: 0.05
++        default: 1.0

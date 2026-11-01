@@ -29,10 +29,6 @@ from gz.msgs10.model_pb2 import Model
 from gz.msgs10.actuators_pb2 import Actuators
 
 HERE = Path(__file__).resolve().parent
-# 仓库结构：本脚本在 03-tools/diag/ 下，模型文件在 <repo>/01-simulation/world/
-_SIM = HERE.parent.parent / "01-simulation" / "world"
-if not (HERE / "robot.urdf").exists() and (_SIM / "robot.urdf").exists():
-    HERE = _SIM
 SRC_U = HERE / "robot.urdf"
 SRC_W = HERE / "robot_world.sdf"
 TU = HERE / "robot_rot_test.urdf"

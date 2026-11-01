@@ -39,7 +39,7 @@
 set -uo pipefail
 
 WS="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DEFAULT_CFG="$WS/gz_gui/airground_gui.config"
+DEFAULT_CFG="$WS/../../01-simulation/gz-gui/airground_gui.config"
 CFG="$DEFAULT_CFG"
 FOLLOW=0
 

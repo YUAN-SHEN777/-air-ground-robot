@@ -81,8 +81,15 @@ constexpr hrt_abstime kRegisterRetryInterval{1_s};
 //! 激活期间 setpoint_config 的重发周期（防丢）
 constexpr hrt_abstime kSetpointConfigInterval{1_s};
 
-//! 舵机功能号（对应 airframe 里 SIM_GZ_SV_FUNC1 = 301）
+//! 9 路摆臂角功能号（对应 airframe 里 SIM_GZ_SV_FUNC1 = 301）
 constexpr float kServoFunction{301.f};
+
+//! 10 路模式切换功能号（对应 airframe 里 SIM_GZ_SV_FUNC2 = 302）
+constexpr float kModeSwitchFunction{302.f};
+
+//! 模式切换舵机角度：45° = 空中位，135° = 地面位
+constexpr float kModeAirDeg{45.f};
+constexpr float kModeGroundDeg{135.f};
 
 //! 消息队列一次最多消费的条数（不依赖各 msg 是否定义 ORB_QUEUE_LENGTH）
 constexpr int kMaxMsgPerCycle{4};
@@ -200,16 +207,26 @@ void GroundDrive::Run()
 	const bool active_now = _registered && (_mode_id >= 0)
 				&& (_vehicle_status.nav_state == (uint8_t)_mode_id);
 
-	// ── 危险状态监测：摆臂在轮位，但当前不是本模式却已解锁 ──
+	// ── 危险状态监测：模式切换在地面位，但当前不是本模式却已解锁 ──
 	// 这时 control_allocator 已在驱动 actuator_motors，而 AirGroundMux 又把桨
 	// 置 0、把所有输出送给了轮子 ⇒ **飞控的姿态混控直接推着车跑**，
 	// 而且推力只有正值（永远不反转）、姿态环持续配平（不动摇杆也在动）。
 	// 实测（2026-10-18）：操作者误点 QGC 的 Takeoff → 切 AUTO_TAKEOFF/Position
 	// → 就是这个状态，车在地面上自己跑，还以为是轮子坏了。
-	if ((_servo_angle_est_deg >= _param_arm_thresh.get()) && !_mode_active && active_now == false
+	if ((_mode_angle_est_deg >= _param_mode_min.get()) && !_mode_active && active_now == false
 	    && (_vehicle_status.arming_state == vehicle_status_s::ARMING_STATE_ARMED)) {
 		if (hrt_elapsed_time(&_last_hazard_warn) > 2_s) {
-			PX4_WARN("ground_drive: 摆臂在轮位但飞控在驾驶！切回 GROUND_DRIVE 或先 Disarm");
+			PX4_WARN("ground_drive: 模式切换在地面位但飞控在驾驶！切回 GROUND_DRIVE 或先 Disarm");
+			_last_hazard_warn = hrt_absolute_time();
+		}
+	}
+
+	// ── 摆臂角仅作状态提示：模式在地面位但摆臂低于 GD_ARM_MIN_DEG 时，车轮可能未触地 ──
+	if (_mode_active && (_mode_angle_est_deg >= _param_mode_min.get())
+	    && (_servo_angle_est_deg < _param_arm_thresh.get())) {
+		if (hrt_elapsed_time(&_last_hazard_warn) > 2_s) {
+			PX4_WARN("ground_drive: 模式在地面位但摆臂仅 %.0f° < %.0f° — 车轮可能未触地",
+				 (double)_servo_angle_est_deg, (double)_param_arm_thresh.get());
 			_last_hazard_warn = hrt_absolute_time();
 		}
 	}
@@ -329,16 +346,13 @@ void GroundDrive::unregisterExternalMode()
 
 // ────────────────────────────────────────────── ② arming check 门控
 
-//! 摆臂角度门控开关（参数 GD_SERVO_GATE，默认 1 = 启用）。
-//!   · 激活中         ：摆臂 >= GD_ARM_MIN_DEG 才允许 arm / 继续 run
+//! 模式切换门控开关（参数 GD_SERVO_GATE，默认 1 = 启用）。
+//!   · 激活中         ：10 路模式切换 >= GD_MODE_MIN_DEG 才允许 arm / 继续 run
 //!   · 未激活 + armed ：仅当【已落地】才放行 → 清 can_run 位 → 拒绝空中误切
 //!   · GD_SERVO_GATE=0：门控彻底失效（含 manualDrive 的输出门控点 ②）
-//!     —— 仅供舵机未接线时的台架调试，必须拆桨 + 整车架空！
+//!     —— 仅供模式切换舵机未接线时的台架调试，必须拆桨 + 整车架空！
 //!
-//! 为什么用参数而不是编译期常量：
-//!   舵机没接/没标定时，把 GD_ARM_MIN_DEG 降到 0 也能绕过门控，但那会连带
-//!   打开 manualDrive() 的输出门控，而且改完必须记得改回去。用独立开关可以
-//!   保持已标定的阈值（48°）不变，重新启用就恢复真实安全限。
+//! ⚠️ 门控只看 10 路模式切换，不看 9 路摆臂角；9 路只负责摆臂角度。
 bool GroundDrive::servoGateEnabled()
 {
 	return _param_servo_gate.get() != 0;
@@ -354,16 +368,13 @@ void GroundDrive::replyToArmingCheck(uint8_t request_id)
 	rep.num_events = 0;
 
 	// 三段式门控（文档 §4.4）：
-	//   激活中  ：摆臂到位才允许 arm / 继续 run
-	//   未激活  ：摆臂到位 且（未解锁 或 已落地）才允许切入
+	//   激活中  ：10 路模式切换到位才允许 arm / 继续 run
+	//   未激活  ：模式切换到位 且（未解锁 或 已落地）才允许切入
 	//
-	// ⚠️ 2026-10-18 修订：未激活分支也【必须】要求 servo_ok。
-	//    原先只查 `!armed || _landed`，于是在摆臂还是 0° 时就能切进地面模式：
-	//    此时 AirGroundMux 仍按飞行位把电机指令送给桨，轮子一动不动，
-	//    操作者看到的是“进了地面模式但车不动”（实测踩过）。
-	//    要求 servo_ok 后，摆臂没到位就切不进来，commander 会直接提示模式被拒。
+	// ⚠️ 门控只看 10 路模式切换，不看 9 路摆臂角。
+	//    9 路只负责把摆臂摆到工作角；模式切换由 10 路独立舵机完成。
 	//
-	// ⚠️ 绝不能写成 `_mode_active ? servo_ok : !armed`（旧版）：
+	// ⚠️ 绝不能写成 `_mode_active ? mode_ok : !armed`（旧版）：
 	//    `_mode_active` 本身就是「nav_state == mode_id」，于是“能不能进去”
 	//    依赖“已经在里面” —— 自指死锁。一旦有任何外部原因把模式顶掉
 	//    （failsafe → Return 等），就永远回不来。
@@ -375,10 +386,10 @@ void GroundDrive::replyToArmingCheck(uint8_t request_id)
 	//   只有“armed 且在空中”才应该拒绝（防空中误切）。
 	//   未解锁时 landed 恒为 true（land detector 的 `!_armed ||` 分支）。
 	const bool armed = (_vehicle_status.arming_state == vehicle_status_s::ARMING_STATE_ARMED);
-	const bool servo_ok = (_servo_angle_est_deg >= _param_arm_thresh.get());
+	const bool mode_ok = (_mode_angle_est_deg >= _param_mode_min.get());
 
 	if (servoGateEnabled()) {
-		rep.can_arm_and_run = _mode_active ? servo_ok : (servo_ok && (!armed || _landed));
+		rep.can_arm_and_run = _mode_active ? mode_ok : (mode_ok && (!armed || _landed));
 
 	} else {
 		rep.can_arm_and_run = true;
@@ -412,12 +423,12 @@ void GroundDrive::activateMode()
 
 	PX4_INFO("ground_drive: mode ACTIVE — requesting TYPE_DIRECT_ACTUATORS");
 
-	// 防御性提示：正常路径下门控已经拦住“摆臂不到位就切进来”，
+	// 防御性提示：正常路径下门控已经拦住“模式切换不到位就切进来”，
 	// 但 activate_mode_immediately / 强制切模式仍可能绕过。
-	// 摆臂不到位时 AirGroundMux 会把输出送给桨而不是轮子 —— 车不会动。
-	if (servoGateEnabled() && (_servo_angle_est_deg < _param_arm_thresh.get())) {
-		PX4_WARN("ground_drive: 摆臂仅 %.0f° < %.0f° — 轮子不会转！先摆到 52°",
-			 (double)_servo_angle_est_deg, (double)_param_arm_thresh.get());
+	// 模式切换未到 135° 时 AirGroundMux 仍把输出送给桨 —— 车不会动。
+	if (servoGateEnabled() && (_mode_angle_est_deg < _param_mode_min.get())) {
+		PX4_WARN("ground_drive: 模式切换仅 %.0f° < %.0f° — 仍为空中模式！先把 10 路切到 135°",
+			 (double)_mode_angle_est_deg, (double)_param_mode_min.get());
 	}
 }
 
@@ -425,6 +436,7 @@ void GroundDrive::deactivateMode()
 {
 	_mode_active = false;
 	_sp_confirmed = false;
+	PX4_INFO("ground_drive: mode INACTIVE");
 
 	// 不需要手动恢复 setpoint type：
 	// ModeManagement::getSetpointType() 在模式切换时会把「被停用的模式」
@@ -486,7 +498,7 @@ void GroundDrive::checkSetpointConfigReply()
 	}
 }
 
-// ──────────────────────────────────────────────────── ④ 摆臂角度外推
+// ──────────────────────────────────────────── ④ 摆臂角 + 模式切换外推
 
 void GroundDrive::updateServoEstimate()
 {
@@ -499,13 +511,29 @@ void GroundDrive::updateServoEstimate()
 		}
 
 		float new_value = NAN;
+		float new_mode_value = NAN;
 		hrt_abstime expire_us = 0;
 
-		if ((cmd.command == vehicle_command_s::VEHICLE_CMD_DO_SET_ACTUATOR)
-		    && (lroundf(cmd.param7) == 0)) {
-			// 187：param1 = 值，param7 = 索引（0 基）。**锁存**，无超时
-			new_value = cmd.param1;
-			expire_us = 0;
+		if (cmd.command == vehicle_command_s::VEHICLE_CMD_DO_SET_ACTUATOR) {
+			// 187 有两种写法：
+			//   param7=0：param1..6 一次写 6 路（旧写法）
+			//   param7=1：只写 9 路摆臂角（param1）
+			//   param7=2：只写 10 路模式切换（param1）
+			const int idx = (int)lroundf(cmd.param7);
+
+			if (idx == 0) {
+				new_value = cmd.param1;
+				new_mode_value = cmd.param2;
+				expire_us = 0;
+
+			} else if (idx == 1) {
+				new_value = cmd.param1;
+				expire_us = 0;
+
+			} else if (idx == 2) {
+				new_mode_value = cmd.param1;
+				expire_us = 0;
+			}
 
 		} else if ((cmd.command == 310 /* MAV_CMD_ACTUATOR_TEST */)
 			   && (lroundf(cmd.param5) == (long)(1000.f + kServoFunction))) {
@@ -514,12 +542,25 @@ void GroundDrive::updateServoEstimate()
 			// PX4 把超时钳到 3 s 上限；param2 <= 0 时也按上限算
 			const float tmo_s = (cmd.param2 > 0.f) ? fminf(cmd.param2, 3.f) : 3.f;
 			expire_us = (hrt_abstime)(tmo_s * 1e6f);
+
+		} else if ((cmd.command == 310)
+			   && (lroundf(cmd.param5) == (long)(1000.f + kModeSwitchFunction))) {
+			// 10 路模式切换：与 9 路同一套 310 语义
+			new_mode_value = cmd.param1;
+			const float tmo_s = (cmd.param2 > 0.f) ? fminf(cmd.param2, 3.f) : 3.f;
+			expire_us = (hrt_abstime)(tmo_s * 1e6f);
 		}
 
 		if (PX4_ISFINITE(new_value)) {
 			_servo_cmd_value = math::constrain(new_value, -1.f, 1.f);
 			_servo_cmd_time = hrt_absolute_time();
 			_servo_cmd_expire_us = expire_us;
+		}
+
+		if (PX4_ISFINITE(new_mode_value)) {
+			_mode_cmd_value = math::constrain(new_mode_value, -1.f, 1.f);
+			_mode_cmd_time = hrt_absolute_time();
+			_mode_cmd_expire_us = expire_us;
 		}
 	}
 
@@ -537,8 +578,17 @@ void GroundDrive::updateServoEstimate()
 		effective_cmd = -1.f;              // = SIM_GZ_SV_DIS1 → 0°
 	}
 
+	float effective_mode_cmd = _mode_cmd_value;
+
+	if ((_mode_cmd_expire_us > 0)
+	    && (hrt_elapsed_time(&_mode_cmd_time) > (hrt_abstime)_mode_cmd_expire_us)) {
+		effective_mode_cmd = -1.f;         // = SIM_GZ_SV_DIS2 → 45°（空中安全位）
+	}
+
 	// ── 一阶限速逼近（朝目标角匀速走，模拟舵机转速上限）──
 	const float target_deg = kArmAnglePerUnit * (effective_cmd + 1.f);
+	const float target_mode_deg = kModeAirDeg
+				      + 0.5f * (effective_mode_cmd + 1.f) * (kModeGroundDeg - kModeAirDeg);
 
 	// 用真实周期而不是硬编码 20 ms：nav_and_controllers 队列会被其他任务挤占，
 	// 周期一抖外推速率就错，而这个角度直接决定 arming 门控是否放行（安全相关）。
@@ -564,15 +614,24 @@ void GroundDrive::updateServoEstimate()
 	} else {
 		_servo_angle_est_deg += copysignf(step, diff);
 	}
+
+	const float mode_diff = target_mode_deg - _mode_angle_est_deg;
+
+	if (fabsf(mode_diff) <= step) {
+		_mode_angle_est_deg = target_mode_deg;
+
+	} else {
+		_mode_angle_est_deg += copysignf(step, mode_diff);
+	}
 }
 
 // ──────────────────────────────────────────────────────────── ⑤ 输出
 
 void GroundDrive::manualDrive(hrt_abstime now)
 {
-	// ★ 门控点 ②：摆臂没到位 → 输出 0（与门控点 ① 双保险）
-	//   GD_SERVO_GATE=0 时此门控也失效（台架调试），此时摆臂 0° 也会驱动电机
-	if (servoGateEnabled() && (_servo_angle_est_deg < _param_arm_thresh.get())) {
+	// ★ 门控点 ②：10 路模式切换没到位 → 输出 0（与门控点 ① 双保险）
+	//   GD_SERVO_GATE=0 时此门控也失效（台架调试），此时空中位也会驱动电机
+	if (servoGateEnabled() && (_mode_angle_est_deg < _param_mode_min.get())) {
 		_last_stick_valid = false;
 		publishZeroMotors(now);
 		return;
@@ -782,9 +841,11 @@ int GroundDrive::print_status()
 	}
 
 	PX4_INFO("mode active     : %s", _mode_active ? "yes" : "no");
-	PX4_INFO("servo gate      : %s (threshold %.1f deg)",
-		 servoGateEnabled() ? "ENABLED" : "DISABLED (bench debug!)", (double)_param_arm_thresh.get());
-	PX4_INFO("servo cmd       : %+.3f  →  est angle %.1f deg (rate %.1f deg/s)",
+	PX4_INFO("mode gate       : %s (mode >= %.1f deg)",
+		 servoGateEnabled() ? "ENABLED" : "DISABLED (bench debug!)", (double)_param_mode_min.get());
+	PX4_INFO("mode switch     : cmd %+.3f  →  est %.1f deg",
+		 (double)_mode_cmd_value, (double)_mode_angle_est_deg);
+	PX4_INFO("arm servo       : cmd %+.3f  →  est %.1f deg (rate %.1f deg/s)",
 		 (double)_servo_cmd_value, (double)_servo_angle_est_deg, (double)_param_servo_rate.get());
 
 	// 原始摇杆四轴：排查「某个方向没反应」时先看这里，别看下面算出来的值

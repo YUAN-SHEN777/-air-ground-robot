@@ -4,7 +4,7 @@
     "actions": [
         {
             "label": "▲ Arm（解锁）",
-            "description": "MAV_CMD_COMPONENT_ARM_DISARM(400) param1=1 param2=0（不带 force）。★地面模式下用这个，不要用 Takeoff！Takeoff 会切 AUTO_TAKEOFF，直接踢掉 GROUND_DRIVE。前置条件：摆臂 ≥ 48°。",
+            "description": "MAV_CMD_COMPONENT_ARM_DISARM(400) param1=1 param2=0（不带 force）。★地面模式下用这个，不要用 Takeoff！Takeoff 会切 AUTO_TAKEOFF，直接踢掉 GROUND_DRIVE。前置条件：10 路模式切换已在 135°（地面位）；摆臂角建议 ≥30° 以保证车轮触地。",
             "mavCmd": 400,
             "compId": 1,
             "param1": 1.0,
@@ -20,7 +20,7 @@
         },
         {
             "label": "▶ 进入地面模式 (GROUND_DRIVE)",
-            "description": "★进入地面驾驶★ MAV_CMD_DO_SET_MODE(176)：param1=1(CUSTOM_MODE_ENABLED) param2=4(MAIN_MODE_AUTO) param3=11(SUB_MODE_EXTERNAL1) → nav_state=23。QGC 的模式下拉里看不到外部模式，只能靠这个按钮切。必须先摆到【≥ 48°】且【未解锁】。",
+            "description": "★进入地面驾驶★ MAV_CMD_DO_SET_MODE(176)：param1=1(CUSTOM_MODE_ENABLED) param2=4(MAIN_MODE_AUTO) param3=11(SUB_MODE_EXTERNAL1) → nav_state=23。QGC 的模式下拉里看不到外部模式，只能靠这个按钮切。必须先把 10 路模式切到【135°（地面位）】且【未解锁】；摆臂角建议 30°。",
             "mavCmd": 176,
             "compId": 1,
             "param1": 1,
@@ -40,83 +40,97 @@
         },
         {
             "label": "️ 摆臂 0° (飞行安全位)",
-            "description": "★安全位★ MAV_CMD_DO_SET_ACTUATOR(187) param1=-1.0 → 输出 0 → 关节 0°。起飞前 / 飞行中摆臂必须在此位置。",
+            "description": "★安全位★ MAV_CMD_DO_SET_ACTUATOR(187) param7=1（9 路）param1=-1.0 → 输出 0 → 关节 0°。起飞前 / 飞行中摆臂必须在此位置。",
             "mavCmd": 187,
             "compId": 1,
             "param1": -1.0,
-            "param7": 0
+            "param7": 1
         },
         {
             "label": "摆臂 6.5°",
-            "description": "MAV_CMD_DO_SET_ACTUATOR(187) param1=-0.75 → 关节 6.5°。",
+            "description": "MAV_CMD_DO_SET_ACTUATOR(187) param7=1（9 路）param1=-0.75 → 关节 6.5°。",
             "mavCmd": 187,
             "compId": 1,
             "param1": -0.75,
-            "param7": 0
+            "param7": 1
         },
         {
             "label": "摆臂 13°",
-            "description": "MAV_CMD_DO_SET_ACTUATOR(187) param1=-0.5 → 关节 13°。",
+            "description": "MAV_CMD_DO_SET_ACTUATOR(187) param7=1（9 路）param1=-0.5 → 关节 13°。",
             "mavCmd": 187,
             "compId": 1,
             "param1": -0.5,
-            "param7": 0
+            "param7": 1
         },
         {
             "label": "摆臂 19.5°",
-            "description": "MAV_CMD_DO_SET_ACTUATOR(187) param1=-0.25 → 关节 19.5°。",
+            "description": "MAV_CMD_DO_SET_ACTUATOR(187) param7=1（9 路）param1=-0.25 → 关节 19.5°。",
             "mavCmd": 187,
             "compId": 1,
             "param1": -0.25,
-            "param7": 0
+            "param7": 1
         },
         {
             "label": "摆臂 26° (中间)",
-            "description": "MAV_CMD_DO_SET_ACTUATOR(187) param1=0.0 → 输出 500 → 关节 26°。",
+            "description": "MAV_CMD_DO_SET_ACTUATOR(187) param7=1（9 路）param1=0.0 → 输出 500 → 关节 26°。",
             "mavCmd": 187,
             "compId": 1,
             "param1": 0.0,
-            "param7": 0
+            "param7": 1
         },
         {
             "label": "摆臂 32.5°",
-            "description": "MAV_CMD_DO_SET_ACTUATOR(187) param1=0.25 → 关节 32.5°。",
+            "description": "MAV_CMD_DO_SET_ACTUATOR(187) param7=1（9 路）param1=0.25 → 关节 32.5°。",
             "mavCmd": 187,
             "compId": 1,
             "param1": 0.25,
-            "param7": 0
+            "param7": 1
         },
         {
             "label": "摆臂 39°",
-            "description": "MAV_CMD_DO_SET_ACTUATOR(187) param1=0.5 → 关节 39°。",
+            "description": "MAV_CMD_DO_SET_ACTUATOR(187) param7=1（9 路）param1=0.5 → 关节 39°。",
             "mavCmd": 187,
             "compId": 1,
             "param1": 0.5,
-            "param7": 0
+            "param7": 1
         },
         {
             "label": "摆臂 45.5°",
-            "description": "MAV_CMD_DO_SET_ACTUATOR(187) param1=0.75 → 关节 45.5°。",
+            "description": "MAV_CMD_DO_SET_ACTUATOR(187) param7=1（9 路）param1=0.75 → 关节 45.5°。",
             "mavCmd": 187,
             "compId": 1,
             "param1": 0.75,
-            "param7": 0
+            "param7": 1
         },
         {
-            "label": "摆臂 48° (地面模式门限)",
-            "description": "★刚好过门限★ MAV_CMD_DO_SET_ACTUATOR(187) param1=0.85 → 关节 48.1°。GD_ARM_MIN_DEG = 48、mux 的 <arm_threshold_deg> = 48，所以 48° 是能驱动轮子的最低角。这里给 48.1° 是为了比阀值高 0.1°，避开浮点/取整边界（精确 48° 写成 param1=0.8462）。实测转向能力处在 52°(17%) 与 45°(33%) 之间，只能当过渡档用。",
+            "label": "摆臂 48°",
+            "description": "MAV_CMD_DO_SET_ACTUATOR(187) param7=1（9 路）param1=0.85 → 关节 48.1°。注意：48° 只是摆臂角，已不再作为模式门限；模式门限由 10 路 GD_MODE_MIN_DEG=135° 决定。",
             "mavCmd": 187,
             "compId": 1,
             "param1": 0.85,
-            "param7": 0
+            "param7": 1
         },
         {
             "label": "摆臂 52° (地面行驶位)",
-            "description": "MAV_CMD_DO_SET_ACTUATOR(187) param1=1.0 → 输出 1000 → 关节 52°。轮盘立起的地面行驶位。",
+            "description": "MAV_CMD_DO_SET_ACTUATOR(187) param7=1（9 路）param1=1.0 → 输出 1000 → 关节 52°。轮盘立起的地面行驶位。",
             "mavCmd": 187,
             "compId": 1,
             "param1": 1.0,
-            "param7": 0
-        }
+            "param7": 1        },
+        {
+            "label": "模式：地面 135° (10 路)",
+            "description": "MAV_CMD_DO_SET_ACTUATOR(187) param7=2（10 路模式切换）param1=+1.0 → 135°。初始 45° = 空中；135° = 地面。9 路摆臂角不受影响。",
+            "mavCmd": 187,
+            "compId": 1,
+            "param1": 1.0,
+            "param7": 2
+        },
+        {
+            "label": "模式：空中 45° (10 路)",
+            "description": "MAV_CMD_DO_SET_ACTUATOR(187) param7=2（10 路模式切换）param1=-1.0 → 45°。回到空中位；9 路摆臂角不受影响。",
+            "mavCmd": 187,
+            "compId": 1,
+            "param1": -1.0,
+            "param7": 2        }
     ]
 }

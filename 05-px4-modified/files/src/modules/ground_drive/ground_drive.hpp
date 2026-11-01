@@ -156,12 +156,21 @@ private:
 	bool         _landed{true};             //!< vehicle_land_detected.landed 缓存（门控用）
 
 	// 摆臂角度外推
-	float        _servo_cmd_value{-1.f};    //!< 最近一次舵机指令 [-1, 1] → 0°
+	float        _servo_cmd_value{-1.f};    //!< 最近一次 9 路摆臂角指令 [-1, 1] → 0°
 	float        _servo_angle_est_deg{0.f};
-	//! 最近一次舵机指令的时间
+	//! 最近一次 9 路摆臂角指令的时间
 	hrt_abstime  _servo_cmd_time{0};
 	//! 该指令的有效期（us）。0 = 无超时（187 锁存）；310 由 param2 指定，最长 3 s
 	uint32_t     _servo_cmd_expire_us{0};
+
+	// 10 路模式切换外推
+	float        _mode_cmd_value{-1.f};    //!< 最近一次模式切换指令 [-1, 1] → 45°
+	float        _mode_angle_est_deg{45.f};//!< 45° = 空中位，135° = 地面位
+	//! 最近一次模式切换指令的时间
+	hrt_abstime  _mode_cmd_time{0};
+	//! 该指令的有效期（us）。0 = 无超时（187 锁存）；310 由 param2 指定，最长 3 s
+	uint32_t     _mode_cmd_expire_us{0};
+
 	//! 上一次执行外推的时刻（用于算真实 dt，而不是硬编码 20 ms）
 	hrt_abstime  _last_servo_update{0};
 
@@ -196,7 +205,8 @@ private:
 	DEFINE_PARAMETERS(
 		(ParamFloat<px4::params::GD_SERVO_RATE>)   _param_servo_rate,
 		(ParamFloat<px4::params::GD_STICK_DZ>)     _param_stick_dz,    // 摇杆死区
-		(ParamFloat<px4::params::GD_ARM_MIN_DEG>)  _param_arm_thresh,
+		(ParamFloat<px4::params::GD_ARM_MIN_DEG>)  _param_arm_thresh,  // 仅状态提示，不参与门控
+		(ParamFloat<px4::params::GD_MODE_MIN_DEG>) _param_mode_min,    // 10 路模式切换门限
 		(ParamInt<px4::params::GD_SERVO_GATE>)     _param_servo_gate,  // 门控总开关（0=台架禁用）
 		(ParamFloat<px4::params::GD_MAX_SPEED>)    _param_max_speed,
 		(ParamFloat<px4::params::GD_WHEEL_TRACK>)  _param_wheel_track,

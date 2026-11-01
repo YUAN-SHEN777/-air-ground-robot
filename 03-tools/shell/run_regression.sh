@@ -98,7 +98,7 @@ fi
 
 echo ""
 echo "④ 运行 verify.py $SUBCMD"
-cd "$WS" || exit 1
+cd "$WS/../verify" || exit 1
 # shellcheck disable=SC2086
 python3 verify.py $SUBCMD
 RC=$?

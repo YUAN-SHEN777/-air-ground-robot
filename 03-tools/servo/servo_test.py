@@ -43,13 +43,19 @@ KEEP = "--keep" in sys.argv
 WANT_SV = ["SIM_GZ_SV_FUNC1", "SIM_GZ_SV_FUNC2",
            "SIM_GZ_SV_MIN1", "SIM_GZ_SV_MAX1",
            "SIM_GZ_SV_MINA1", "SIM_GZ_SV_MAXA1",
-           "SIM_GZ_SV_DIS1", "SIM_GZ_SV_FAIL1"]
+           "SIM_GZ_SV_DIS1", "SIM_GZ_SV_FAIL1",
+           "SIM_GZ_SV_MIN2", "SIM_GZ_SV_MAX2",
+           "SIM_GZ_SV_MINA2", "SIM_GZ_SV_MAXA2",
+           "SIM_GZ_SV_DIS2", "SIM_GZ_SV_FAIL2"]
 # 期望值（与 airframe 一致）
 # ⚠️ MIN/MAX/DIS/FAIL 是 0~1000 的【整数】，不是 [-1,1]（源码 module.yaml 的 standard_params）
-EXPECT = {"SIM_GZ_SV_FUNC1": 301, "SIM_GZ_SV_FUNC2": 0,
+EXPECT = {"SIM_GZ_SV_FUNC1": 301, "SIM_GZ_SV_FUNC2": 302,
           "SIM_GZ_SV_MIN1": 0, "SIM_GZ_SV_MAX1": 1000,
           "SIM_GZ_SV_MINA1": 0.0, "SIM_GZ_SV_MAXA1": 52.0,
-          "SIM_GZ_SV_DIS1": 0, "SIM_GZ_SV_FAIL1": 0}
+          "SIM_GZ_SV_DIS1": 0, "SIM_GZ_SV_FAIL1": 0,
+          "SIM_GZ_SV_MIN2": 0, "SIM_GZ_SV_MAX2": 1000,
+          "SIM_GZ_SV_MINA2": 45.0, "SIM_GZ_SV_MAXA2": 135.0,
+          "SIM_GZ_SV_DIS2": 0, "SIM_GZ_SV_FAIL2": 0}
 
 
 def banner(s):

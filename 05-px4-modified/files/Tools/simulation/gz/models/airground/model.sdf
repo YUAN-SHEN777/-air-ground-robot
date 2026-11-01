@@ -827,12 +827,38 @@
       <cmd_min>-3.0</cmd_min>
       <initial_position>0</initial_position>
     </plugin>
-    <!-- 空-地（机械切换）仿真器：摆臂 >= 48 度时把电机命令送给轮子并让桨停，
-         飞行位则原样转发给桨。源码见 px4_changes/gz_plugins/airground_mux/。
-         filename 用绝对路径（libairground_mux.so 由 install_sim_plugin.sh 拷贝）。 -->
+    <plugin name='gz::sim::systems::JointController' filename='gz-sim-joint-controller-system'>
+      <joint_name>joint7</joint_name>
+      <sub_topic>/cmd/wheel_speed</sub_topic>
+      <topic>/cmd/wheel_speed</topic>
+      <initial_velocity>0</initial_velocity>
+      <use_force_commands>false</use_force_commands>
+    </plugin>
+    <plugin name='gz::sim::systems::JointController' filename='gz-sim-joint-controller-system'>
+      <joint_name>joint8</joint_name>
+      <sub_topic>/cmd/wheel_speed</sub_topic>
+      <topic>/cmd/wheel_speed</topic>
+      <initial_velocity>0</initial_velocity>
+      <use_force_commands>false</use_force_commands>
+    </plugin>
+    <plugin name='gz::sim::systems::JointController' filename='gz-sim-joint-controller-system'>
+      <joint_name>joint9</joint_name>
+      <sub_topic>/cmd/wheel_speed</sub_topic>
+      <topic>/cmd/wheel_speed</topic>
+      <initial_velocity>0</initial_velocity>
+      <use_force_commands>false</use_force_commands>
+    </plugin>
+    <plugin name='gz::sim::systems::JointController' filename='gz-sim-joint-controller-system'>
+      <joint_name>joint10</joint_name>
+      <sub_topic>/cmd/wheel_speed</sub_topic>
+      <topic>/cmd/wheel_speed</topic>
+      <initial_velocity>0</initial_velocity>
+      <use_force_commands>false</use_force_commands>
+    </plugin>
     <plugin name='airground::AirGroundMux' filename='/home/yuan/PX4-Autopilot/Tools/simulation/gz/models/airground/libairground_mux.so'>
       <servo_joint>servo_0</servo_joint>
-      <arm_threshold_deg>48</arm_threshold_deg>
+      <mode_air_deg>45</mode_air_deg>
+      <mode_ground_deg>135</mode_ground_deg>
       <wheel_joints>joint7 joint8 joint9 joint10</wheel_joints>
       <wheel_signs>1 1 1 1</wheel_signs>
       <gear_ratio>64</gear_ratio>
@@ -856,8 +882,20 @@
       <actuator_number>0</actuator_number>
       <rotorDragCoefficient>0</rotorDragCoefficient>
       <rollingMomentCoefficient>0</rollingMomentCoefficient>
-      <rotorVelocitySlowdownSim>10</rotorVelocitySlowdownSim>
+      <rotorVelocitySlowdownSim>1</rotorVelocitySlowdownSim>
       <motorType>velocity</motorType>
+    </plugin>
+    <plugin name='airground::ReverseThrust' filename='/home/yuan/PX4-Autopilot/Tools/simulation/gz/models/airground/libairground_revthrust.so'>
+      <linkName>link1</linkName>
+      <motorConstant>5.002070e-06</motorConstant>
+      <maxRotVelocity>1000.0</maxRotVelocity>
+      <timeConstantUp>0.0125</timeConstantUp>
+      <timeConstantDown>0.025</timeConstantDown>
+      <commandSubTopic>command/motor_speed</commandSubTopic>
+      <actuator_number>0</actuator_number>
+      <reverse_thrust_fraction>0.4</reverse_thrust_fraction>
+      <prop_zero_offset>500</prop_zero_offset>
+      <prop_span>500</prop_span>
     </plugin>
     <plugin name='gz::sim::systems::MulticopterMotorModel' filename='gz-sim-multicopter-motor-model-system'>
       <jointName>joint4</jointName>
@@ -873,8 +911,20 @@
       <actuator_number>1</actuator_number>
       <rotorDragCoefficient>0</rotorDragCoefficient>
       <rollingMomentCoefficient>0</rollingMomentCoefficient>
-      <rotorVelocitySlowdownSim>10</rotorVelocitySlowdownSim>
+      <rotorVelocitySlowdownSim>1</rotorVelocitySlowdownSim>
       <motorType>velocity</motorType>
+    </plugin>
+    <plugin name='airground::ReverseThrust' filename='/home/yuan/PX4-Autopilot/Tools/simulation/gz/models/airground/libairground_revthrust.so'>
+      <linkName>link2</linkName>
+      <motorConstant>5.002070e-06</motorConstant>
+      <maxRotVelocity>1000.0</maxRotVelocity>
+      <timeConstantUp>0.0125</timeConstantUp>
+      <timeConstantDown>0.025</timeConstantDown>
+      <commandSubTopic>command/motor_speed</commandSubTopic>
+      <actuator_number>1</actuator_number>
+      <reverse_thrust_fraction>0.4</reverse_thrust_fraction>
+      <prop_zero_offset>500</prop_zero_offset>
+      <prop_span>500</prop_span>
     </plugin>
     <plugin name='gz::sim::systems::MulticopterMotorModel' filename='gz-sim-multicopter-motor-model-system'>
       <jointName>joint5</jointName>
@@ -890,8 +940,20 @@
       <actuator_number>2</actuator_number>
       <rotorDragCoefficient>0</rotorDragCoefficient>
       <rollingMomentCoefficient>0</rollingMomentCoefficient>
-      <rotorVelocitySlowdownSim>10</rotorVelocitySlowdownSim>
+      <rotorVelocitySlowdownSim>1</rotorVelocitySlowdownSim>
       <motorType>velocity</motorType>
+    </plugin>
+    <plugin name='airground::ReverseThrust' filename='/home/yuan/PX4-Autopilot/Tools/simulation/gz/models/airground/libairground_revthrust.so'>
+      <linkName>link3</linkName>
+      <motorConstant>5.002070e-06</motorConstant>
+      <maxRotVelocity>1000.0</maxRotVelocity>
+      <timeConstantUp>0.0125</timeConstantUp>
+      <timeConstantDown>0.025</timeConstantDown>
+      <commandSubTopic>command/motor_speed</commandSubTopic>
+      <actuator_number>2</actuator_number>
+      <reverse_thrust_fraction>0.4</reverse_thrust_fraction>
+      <prop_zero_offset>500</prop_zero_offset>
+      <prop_span>500</prop_span>
     </plugin>
     <plugin name='gz::sim::systems::MulticopterMotorModel' filename='gz-sim-multicopter-motor-model-system'>
       <jointName>joint6</jointName>
@@ -907,8 +969,20 @@
       <actuator_number>3</actuator_number>
       <rotorDragCoefficient>0</rotorDragCoefficient>
       <rollingMomentCoefficient>0</rollingMomentCoefficient>
-      <rotorVelocitySlowdownSim>10</rotorVelocitySlowdownSim>
+      <rotorVelocitySlowdownSim>1</rotorVelocitySlowdownSim>
       <motorType>velocity</motorType>
+    </plugin>
+    <plugin name='airground::ReverseThrust' filename='/home/yuan/PX4-Autopilot/Tools/simulation/gz/models/airground/libairground_revthrust.so'>
+      <linkName>link4</linkName>
+      <motorConstant>5.002070e-06</motorConstant>
+      <maxRotVelocity>1000.0</maxRotVelocity>
+      <timeConstantUp>0.0125</timeConstantUp>
+      <timeConstantDown>0.025</timeConstantDown>
+      <commandSubTopic>command/motor_speed</commandSubTopic>
+      <actuator_number>3</actuator_number>
+      <reverse_thrust_fraction>0.4</reverse_thrust_fraction>
+      <prop_zero_offset>500</prop_zero_offset>
+      <prop_span>500</prop_span>
     </plugin>
     <frame name='ref_ref1_frame' attached_to='base_link'>
       <pose>0 0 0 0 0 0</pose>
